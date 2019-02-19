@@ -104,7 +104,7 @@ def get_score(args, scores, simulator_setting):
         score = get_default_score(scores, simulator_setting)
     return score
 
-def get_default_score(scores, simulator_setting):
+def get_score_stats(scores):
     gain = list(map(lambda x: x["gain"], scores))
     win = list(filter(lambda x: x > 0, gain))
     loss = list(filter(lambda x: x < 0, gain))
@@ -114,65 +114,64 @@ def get_default_score(scores, simulator_setting):
     profit_factor = sum(win) / abs(sum(loss)) if abs(sum(loss)) > 0 else sum(win)
     gain_per_trade = sum(gain) / sum(trade) if sum(trade) > 0 else 0
 
-    score = profit_factor * sum(gain) * (1 - max(max_drawdown))
+    return {
+        "gain": gain,
+        "win": win,
+        "loss": loss,
+        "drawdown": drawdown,
+        "max_drawdown": max_drawdown,
+        "trade": trade,
+        "profit_factor": profit_factor,
+        "gain_per_trade": gain_per_trade
+    }
+
+def print_score_stats(name, score, score_stats, assets):
+    stats = [
+        "min_gain:", min(score_stats["gain"]) / assets,
+        "sum_gain:", sum(score_stats["gain"]),
+        "pf:", score_stats["profit_factor"],
+        "gpt:", score_stats["gain_per_trade"],
+        "t:", sum(score_stats["trade"])]
+
+    print(name, stats, score)
+
+def get_default_score(scores, simulator_setting):
+    score_stats = get_score_stats(scores)
 
     ignore = [
 #        len(list(filter(lambda x: x > 0.1, max_drawdown))), # 最大ドローダウンが10%以上の期間が存在する
 #        len(list(filter(lambda x: x > 0, gain))) < len(scores) / 2, # 利益が出ている期間が半分以下
-        sum(gain) <= 0, # 損益がマイナス
-        sum(trade) < 30, # 取引数が少ない
-        profit_factor < 1.5, # プロフィットファクター（総純利益 / 総損失）が1.5以下
+        sum(score_stats["gain"]) <= 0, # 損益がマイナス
+        sum(score_stats["trade"]) < 30, # 取引数が少ない
+        score_stats["profit_factor"] < 1.5, # プロフィットファクター（総純利益 / 総損失）が1.5以下
 #        gain_per_trade < 5000, # 1トレードあたりの平均利益が5000円以下
     ]
 
-    stats = [
-        "min_gain:", min(gain) / simulator_setting.assets,
-        "sum_gain:", sum(gain),
-        "pf:", profit_factor,
-        "gpt:", gain_per_trade,
-        "t:", sum(trade)]
-
+    score = score_stats["profit_factor"] * sum(score_stats["gain"]) * (1 - max(score_stats["max_drawdown"]))
     if any(ignore):
         score = 0
 
-    print("default:", stats, score)
+    print_score_stats("default:", score, score_stats, simulator_setting.assets)
 
     return score
 
 def get_tick_score(scores, simulator_setting):
-    gain = list(map(lambda x: x["gain"], scores))
-    win = list(filter(lambda x: x > 0, gain))
-    loss = list(filter(lambda x: x < 0, gain))
-    drawdown = list(map(lambda x: x["drawdown"], scores))
-    max_drawdown = list(map(lambda x: x["max_drawdown"], scores))
-    trade = list(map(lambda x: x["trade"], scores))
-    win_trade = list(map(lambda x: x["win_trade"], scores))
-    profit_factor = sum(win) / abs(sum(loss)) if abs(sum(loss)) > 0 else 0
-    gain_per_trade = sum(gain) / sum(trade) if sum(trade) > 0 else 0
-    win_rate = sum(win_trade) / sum(trade) if sum(trade) > 0 else 0
-
-    score = profit_factor * sum(gain) * (1 - max(max_drawdown)) * sum(win_trade)
+    score_stats = get_score_stats(scores)
 
     ignore = [
 #        len(list(filter(lambda x: x > 0.1, max_drawdown))), # 最大ドローダウンが10%以上の期間が存在する
 #        len(list(filter(lambda x: x > 0, gain))) < len(scores) / 2, # 利益が出ている期間が半分以下
-        sum(gain) <= 0, # 損益がマイナス
-#        sum(trade) < 30, # 取引数が少ない
-        profit_factor < 1.5, # プロフィットファクター（総純利益 / 総損失）が1.5以下
+        sum(score_stats["gain"]) <= 0, # 損益がマイナス
+#        sum(score_stats["trade"]) < 30, # 取引数が少ない
+        score_stats["profit_factor"] < 1.5, # プロフィットファクター（総純利益 / 総損失）が1.5以下
 #        gain_per_trade < 5000, # 1トレードあたりの平均利益が5000円以下
     ]
 
-    stats = [
-        "min_gain:", min(gain) / simulator_setting.assets,
-        "sum_gain:", sum(gain),
-        "pf:", profit_factor,
-        "gpt:", gain_per_trade,
-        "t:", sum(trade)]
-
+    score = score_stats["profit_factor"] * sum(score_stats["gain"]) * (1 - max(score_stats["max_drawdown"])) * sum(score_stats["win_trade"])
     if any(ignore):
         score = 0
 
-    print("tick:", stats, score)
+    print_score_stats("tick:", score, score_stats, simulator_setting.assets)
 
     return score
 
