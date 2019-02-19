@@ -139,7 +139,7 @@ def get_default_score(scores, simulator_setting):
     score_stats = get_score_stats(scores)
 
     ignore = [
-#        len(list(filter(lambda x: x > 0.1, max_drawdown))), # 最大ドローダウンが10%以上の期間が存在する
+        len(list(filter(lambda x: x > 0.1, score_stats["max_drawdown"]))), # 最大ドローダウンが10%以上の期間が存在する
 #        len(list(filter(lambda x: x > 0, gain))) < len(scores) / 2, # 利益が出ている期間が半分以下
         sum(score_stats["gain"]) <= 0, # 損益がマイナス
         sum(score_stats["trade"]) < 30, # 取引数が少ない
