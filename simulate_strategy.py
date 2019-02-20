@@ -111,6 +111,7 @@ def get_score_stats(scores):
     drawdown = list(map(lambda x: x["drawdown"], scores))
     max_drawdown = list(map(lambda x: x["max_drawdown"], scores))
     trade = list(map(lambda x: x["trade"], scores))
+    win_trade = list(map(lambda x: x["win_trade"], scores))
     profit_factor = sum(win) / abs(sum(loss)) if abs(sum(loss)) > 0 else sum(win)
     gain_per_trade = sum(gain) / sum(trade) if sum(trade) > 0 else 0
 
@@ -122,7 +123,8 @@ def get_score_stats(scores):
         "max_drawdown": max_drawdown,
         "trade": trade,
         "profit_factor": profit_factor,
-        "gain_per_trade": gain_per_trade
+        "gain_per_trade": gain_per_trade,
+        "win_trade": win_trade
     }
 
 def print_score_stats(name, score, score_stats, assets):
