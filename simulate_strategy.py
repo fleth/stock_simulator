@@ -80,10 +80,15 @@ def load_index(args, start_date, end_date):
 
     return index
 
-def load(args, codes, start_date, end_date):
+def load(args, codes, terms, daterange):
+    min_start_date = min(list(map(lambda x: x["start_date"], terms)))
+    prepare_term = utils.relativeterm(12, args.tick)
+    start_date = utils.to_format(min_start_date - prepare_term)
+    end_date = utils.format(args.date)
+
     print("loading %s %s %s" % (len(codes), start_date, end_date))
     data = {}
-    params = list(map(lambda x: {"code": x, "start_date": start_date, "end_date": end_date, "args": args}, codes))
+    params = list(map(lambda x: {"code": x, "start_date": utils.to_format(daterange[x][0] - prepare_term), "end_date": utils.to_format(daterange[x][-1]), "args": args}, codes))
 
     p = Pool(8)
     ret = p.map(create_simulator_data, params)
@@ -241,12 +246,6 @@ def create_terms(args):
     print(list(map(lambda x: "%s - %s" % (str(x["start_date"]), str(x["end_date"])), validate_terms)))
     return terms, validate_terms
 
-def load_all_data(args, codes, terms):
-    min_start_date = min(list(map(lambda x: x["start_date"], terms)))
-    prepare_term = utils.relativeterm(12, args.tick)
-    all_data = load(args, codes, utils.to_format(min_start_date - prepare_term), utils.format(args.date))
-    return all_data
-
 def create_performance(simulator_setting, performances):
     print(json.dumps(performances))
 
@@ -341,11 +340,11 @@ if args.tick:
     end = end + datetime.timedelta(hours=9)
 end = utils.to_format_by_term(end, args.tick)
 strategy_simulator = StrategySimulator(simulate_setting, strategy_creator, verbose=args.verbose)
-codes, validate_codes = strategy_simulator.select_codes(args, start, end)
+codes, validate_codes, daterange = strategy_simulator.select_codes(args, start, end)
 
 print("target : %s" % codes)
 
-data = load_all_data(args, codes, terms)
+data = load(args, codes, terms, daterange)
 
 # 期間ごとに最適化
 terms = sorted(terms, key=lambda x: x["start_date"])
