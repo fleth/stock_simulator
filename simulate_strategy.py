@@ -52,6 +52,7 @@ args = parser.parse_args()
 
 def create_setting(args, assets):
     setting = SimulatorSetting()
+    setting.min_data_length = args.validate_term * 10
     setting.assets = assets
     setting.commission = 150
     setting.debug = args.verbose
@@ -66,7 +67,12 @@ def create_simulator_data(param):
     end_date = param["end_date"]
     args = param["args"]
 
-    return strategy.load_simulator_data(code, start_date, end_date, args)
+    settings = strategy.LoadSettings()
+    settings.with_stats = args.with_stats
+    settings.weekly = not args.ignore_weekly
+
+    data = strategy.load_simulator_data(code, start_date, end_date, args, settings)
+    return data
 
 def load_index(args, start_date, end_date):
     index = {}
@@ -82,7 +88,7 @@ def load_index(args, start_date, end_date):
 
 def load(args, codes, terms, daterange):
     min_start_date = min(list(map(lambda x: x["start_date"], terms)))
-    prepare_term = utils.relativeterm(12, args.tick)
+    prepare_term = utils.relativeterm(args.validate_term, args.tick)
     start_date = utils.to_format(min_start_date - prepare_term)
     end_date = utils.format(args.date)
 
@@ -134,6 +140,7 @@ def get_score_stats(scores):
 
 def print_score_stats(name, score, score_stats, assets):
     stats = [
+        "max_drawdown", max(score_stats["max_drawdown"]),
         "min_gain:", min(score_stats["gain"]) / assets,
         "sum_gain:", sum(score_stats["gain"]),
         "pf:", score_stats["profit_factor"],
@@ -146,7 +153,8 @@ def get_default_score(scores, simulator_setting):
     score_stats = get_score_stats(scores)
 
     ignore = [
-        len(list(filter(lambda x: x > 0.1, score_stats["max_drawdown"]))), # 最大ドローダウンが10%以上の期間が存在する
+#        len(list(filter(lambda x: x > 0.1, score_stats["max_drawdown"]))) > 0, # 最大ドローダウンが10%以上の期間が存在する
+#        len(list(filter(lambda x: x < -0.1, score_stats["gain"]))) > 0, # 10%以上の損失が存在する
 #        len(list(filter(lambda x: x > 0, gain))) < len(scores) / 2, # 利益が出ている期間が半分以下
         sum(score_stats["gain"]) <= 0, # 損益がマイナス
         sum(score_stats["trade"]) < 30, # 取引数が少ない
