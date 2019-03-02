@@ -109,11 +109,11 @@ def load(args, codes, terms, daterange):
     print("loading done")
     return {"data": data, "index": index, "args": args}
 
-def get_score(args, scores, simulator_setting):
+def get_score(args, scores, simulator_setting, strategy_setting):
     if args.tick:
-        score = get_tick_score(scores, simulator_setting)
+        score = get_tick_score(scores, simulator_setting, strategy_setting)
     else:
-        score = get_default_score(scores, simulator_setting)
+        score = get_default_score(scores, simulator_setting, strategy_setting)
     return score
 
 def get_score_stats(scores):
@@ -139,7 +139,7 @@ def get_score_stats(scores):
         "win_trade": win_trade
     }
 
-def print_score_stats(name, score, score_stats, assets):
+def print_score_stats(name, score, score_stats, assets, strategy_setting):
     stats = [
         "max_drawdown", max(score_stats["max_drawdown"]),
         "min_gain:", min(score_stats["gain"]) / assets,
@@ -149,8 +149,12 @@ def print_score_stats(name, score, score_stats, assets):
         "t:", sum(score_stats["trade"])]
 
     print(name, stats, score)
+    setting = {"name": name, "stats": stats, "score": score, "setting": strategy_setting.to_dict()}
+    with open("settings/simulate.log", "a") as f:
+        f.write(json.dumps(setting))
+        f.write("\n")
 
-def get_default_score(scores, simulator_setting):
+def get_default_score(scores, simulator_setting, strategy_setting):
     score_stats = get_score_stats(scores)
 
     ignore = [
@@ -167,11 +171,11 @@ def get_default_score(scores, simulator_setting):
     if any(ignore):
         score = 0
 
-    print_score_stats("default:", score, score_stats, simulator_setting.assets)
+    print_score_stats("default:", score, score_stats, simulator_setting.assets, strategy_setting)
 
     return score
 
-def get_tick_score(scores, simulator_setting):
+def get_tick_score(scores, simulator_setting, strategy_setting):
     score_stats = get_score_stats(scores)
 
     ignore = [
@@ -187,7 +191,7 @@ def get_tick_score(scores, simulator_setting):
     if any(ignore):
         score = 0
 
-    print_score_stats("tick:", score, score_stats, simulator_setting.assets)
+    print_score_stats("tick:", score, score_stats, simulator_setting.assets, strategy_setting)
 
     return score
 
@@ -209,7 +213,7 @@ def objective(args, strategy_setting, datas, terms, strategy_simulator):
     print(strategy_setting.__dict__)
     try:
         scores = simulate_by_multiple_term(strategy_setting, datas, terms, strategy_simulator)
-        score = get_score(args, scores, strategy_simulator.simulator_setting)
+        score = get_score(args, scores, strategy_simulator.simulator_setting, strategy_setting)
     except Exception as e:
         print("skip objective. %s" % e)
         import traceback
@@ -315,7 +319,7 @@ def walkforward(args, data, terms, strategy_simulator):
 
     # 結果の表示 =============================================================================
     create_performance(strategy_simulator.simulator_setting, performances)
-    validate_score = -get_score(args, performances.values(), strategy_simulator.simulator_setting)
+    validate_score = -get_score(args, performances.values(), strategy_simulator.simulator_setting, strategy_setting)
     print(validate_score)
 
     if args.output:
@@ -357,6 +361,10 @@ data = load(args, codes, terms, daterange)
 
 # 期間ごとに最適化
 terms = sorted(terms, key=lambda x: x["start_date"])
+
+# 結果ログを削除
+params = ["rm", "-rf", "settings/simulate.log"]
+subprocess.call(params)
 
 if args.random > 0:
     # 指定回数ランダムで最適化して検証スコアが高い
