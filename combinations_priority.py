@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 sys.path.append("lib")
 from loader import Loader
 import strategy
+from strategy import CombinationSetting
 
 parser = ArgumentParser()
 parser.add_argument("count", type=int)
@@ -16,7 +17,8 @@ args = parser.parse_args()
 prefix = strategy.get_prefix(args)
 filename = strategy.get_filename(args)
 
-combination_strategy = strategy.load_strategy_creator(args)
+combination_setting = CombinationSetting()
+combination_strategy = strategy.load_strategy_creator(args, combination_setting)
 
 checker = strategy.CombinationChecker(combination_strategy)
 
