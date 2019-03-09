@@ -262,6 +262,11 @@ def create_terms(args):
 def create_performance(simulator_setting, performances):
     print(json.dumps(performances))
 
+    # レポート出力
+    with open("settings/performance.json", "w") as f:
+        f.write(json.dumps(performances))
+
+    # 簡易レポート
     for k, v in sorted(performances.items(), key=lambda x: utils.to_datetime(x[0])):
         print(k, v)
 
