@@ -344,6 +344,7 @@ else:
 
 combination_setting = strategy.CombinationSetting()
 combination_setting.position_sizing = args.position_sizing
+combination_setting.monitor_num = combination_setting.monitor_num if args.monitor_num is None else int(args.monitor_num)
 
 # 戦略の選択
 strategy_creator = strategy.load_strategy_creator(args, combination_setting)
