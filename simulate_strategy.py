@@ -3,6 +3,7 @@ import sys
 import pandas
 import json
 import time
+import numpy
 import copy
 import subprocess
 import datetime
@@ -271,13 +272,15 @@ def create_performance(simulator_setting, performances):
         print(k, v)
 
     gain = sum(list(map(lambda x: x["gain"], performances.values())))
+    average_trade_size = numpy.average(list(map(lambda x: len(x["codes"]), performances.values())))
 
     result = {
         "gain": [gain],
         "return": [gain / simulator_setting.assets],
         "max_drawdown": [max(list(map(lambda x: x["max_drawdown"], performances.values())))],
         "max_position_term": [max(list(map(lambda x: x["max_position_term"], performances.values())))],
-        "max_position_size": [max(list(map(lambda x: x["max_position_size"], performances.values())))]
+        "max_position_size": [max(list(map(lambda x: x["max_position_size"], performances.values())))],
+        "average_trade_size": average_trade_size
     }
     print(json.dumps(result))
 
@@ -285,14 +288,19 @@ def create_performance(simulator_setting, performances):
         detail = pandas.DataFrame(result)
         detail.to_csv("settings/simulates.csv", index=None)
         slack.file_post("csv", "settings/simulates.csv", channel="stock_alert")
+    return result
 
-def output_setting(args, strategy_setting, score, validate_score):
+def output_setting(args, strategy_setting, score, validate_score, strategy_simulator, report):
+    monitor_size = strategy_simulator.strategy_creator.combination_setting.monitor_size
+    monitor_size_ratio = monitor_size / report["average_trade_size"]
     with open("settings/%s" % strategy.get_filename(args), "w") as f:
         f.write(json.dumps({
             "date": args.date,
             "term": args.validate_term,
             "score": int(score),
             "validate_score": int(validate_score),
+            "monitor_size": monitor_size,
+            "monitor_size_ratio": monitor_size_ratio,
             "setting": strategy_setting.__dict__
         }))
 
@@ -323,12 +331,12 @@ def walkforward(args, data, terms, strategy_simulator):
         performances[utils.to_format(utils.to_datetime_by_term(end_date, args.tick))] = result
 
     # 結果の表示 =============================================================================
-    create_performance(strategy_simulator.simulator_setting, performances)
+    report = create_performance(strategy_simulator.simulator_setting, performances)
     validate_score = -get_score(args, performances.values(), strategy_simulator.simulator_setting, strategy_setting)
     print(validate_score)
 
     if args.output:
-        output_setting(args, strategy_setting, score, validate_score)
+        output_setting(args, strategy_setting, score, validate_score, strategy_simulator, report)
 
 
 ######################################################################
@@ -342,11 +350,8 @@ if args.assets is None:
 else:
     simulate_setting = create_setting(args, args.assets)
 
-combination_setting = strategy.CombinationSetting()
-combination_setting.position_sizing = args.position_sizing
-combination_setting.monitor_num = combination_setting.monitor_num if args.monitor_num is None else int(args.monitor_num)
-
 # 戦略の選択
+combination_setting = strategy.create_combination_setting(args)
 strategy_creator = strategy.load_strategy_creator(args, combination_setting)
 
 # 翌期間用の設定を出力する
