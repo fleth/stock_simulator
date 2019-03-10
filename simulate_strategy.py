@@ -96,7 +96,7 @@ def load(args, codes, terms, daterange):
 
     print("loading %s %s %s" % (len(codes), start_date, end_date))
     data = {}
-    params = list(map(lambda x: {"code": x, "start_date": utils.to_format(daterange[x][0] - prepare_term), "end_date": utils.to_format(daterange[x][-1]), "args": args}, codes))
+    params = list(map(lambda x: {"code": x, "start_date": utils.to_format(daterange[x][0]), "end_date": utils.to_format(daterange[x][-1]), "args": args}, codes))
 
     p = Pool(8)
     ret = p.map(create_simulator_data, params)
