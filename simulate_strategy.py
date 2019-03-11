@@ -292,7 +292,7 @@ def create_performance(simulator_setting, performances):
     return result
 
 def output_setting(args, strategy_setting, score, validate_score, strategy_simulator, report):
-    monitor_size = strategy_simulator.strategy_creator.combination_setting.monitor_size
+    monitor_size = strategy_simulator.strategy_creator.setting.monitor_size
     monitor_size_ratio = monitor_size / report["average_trade_size"]
     with open("settings/%s" % strategy.get_filename(args), "w") as f:
         f.write(json.dumps({
