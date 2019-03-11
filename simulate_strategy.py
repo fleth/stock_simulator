@@ -47,6 +47,7 @@ parser.add_argument("--upload", action="store_true", default=False, dest="upload
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
 parser.add_argument("--auto_stop_loss", action="store_true", default=False, dest="auto_stop_loss", help="自動損切")
 parser.add_argument("--stop_loss_rate", type=float, action="store", default=0.02, dest="stop_loss_rate", help="損切レート")
+parser.add_argument("--monitor_size_optimize", action="store_true", default=False, dest="monitor_size_optimize", help="監視対象の最適化")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
 
@@ -351,7 +352,7 @@ else:
     simulate_setting = create_setting(args, args.assets)
 
 # 戦略の選択
-combination_setting = strategy.create_combination_setting(args)
+combination_setting = strategy.create_combination_setting(args, args.monitor_size_optimize)
 strategy_creator = strategy.load_strategy_creator(args, combination_setting)
 
 # 翌期間用の設定を出力する
