@@ -12,6 +12,7 @@ from multiprocessing import Pool
 from argparse import ArgumentParser
 
 sys.path.append("lib")
+import cache
 import utils
 import slack
 import strategy
@@ -53,6 +54,12 @@ args = parser.parse_args()
 
 # start を1/1, endを12/31にしてしまうと前後のデータがないのでロードに失敗する
 
+def create_cache_name(args):
+    prefix = strategy.get_prefix(args)
+    params = [args.date, args.validate_term, args.count, args.optimize_count, args.tick]
+    params = list(map(lambda x: str(x), params))
+    return "%s%s" % (prefix, "_".join(params))
+
 def create_setting(args, assets):
     setting = SimulatorSetting()
     setting.min_data_length = args.validate_term * 10
@@ -74,7 +81,13 @@ def create_simulator_data(param):
     settings.with_stats = args.with_stats
     settings.weekly = not args.ignore_weekly
 
-    data = strategy.load_simulator_data(code, start_date, end_date, args, settings)
+    cacher = cache.Cache("/tmp/simulator_data")
+    cache_name = "_".join([create_cache_name(args), str(code), str(start_date), str(end_date)])
+    if cacher.exists(cache_name):
+        return cacher.get(cache_name)
+    else:
+        data = strategy.load_simulator_data(code, start_date, end_date, args, settings)
+        cacher.create(cache_name, data)
     return data
 
 def load_index(args, start_date, end_date):
