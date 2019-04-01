@@ -49,6 +49,7 @@ parser.add_argument("--random", type=int, action="store", default=0, dest="rando
 parser.add_argument("--auto_stop_loss", action="store_true", default=False, dest="auto_stop_loss", help="自動損切")
 parser.add_argument("--stop_loss_rate", type=float, action="store", default=0.02, dest="stop_loss_rate", help="損切レート")
 parser.add_argument("--monitor_size_optimize", action="store_true", default=False, dest="monitor_size_optimize", help="監視対象の最適化")
+parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
 
@@ -78,16 +79,9 @@ def create_simulator_data(param):
     args = param["args"]
 
     settings = strategy.LoadSettings()
-    settings.with_stats = args.with_stats
-    settings.weekly = not args.ignore_weekly
+    settings.with_stats = False # startegy_simlator側で各足毎に統計値を出力するのでここでは計算しない
 
-    cacher = cache.Cache("/tmp/simulator_data")
-    cache_name = "_".join([create_cache_name(args), str(code), str(start_date), str(end_date)])
-    if cacher.exists(cache_name):
-        return cacher.get(cache_name)
-    else:
-        data = strategy.load_simulator_data(code, start_date, end_date, args, settings)
-        cacher.create(cache_name, data)
+    data = strategy.load_simulator_data(code, start_date, end_date, args, settings)
     return data
 
 def load_index(args, start_date, end_date):
@@ -366,6 +360,7 @@ else:
 
 # 戦略の選択
 combination_setting = strategy.create_combination_setting(args, args.monitor_size_optimize)
+combination_setting.montecarlo = args.montecarlo
 strategy_creator = strategy.load_strategy_creator(args, combination_setting)
 
 # 翌期間用の設定を出力する
