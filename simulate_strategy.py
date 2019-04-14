@@ -70,6 +70,7 @@ def create_setting(args, assets):
     setting.sizing = False
     setting.short_trade = args.short
     setting.auto_stop_loss = args.auto_stop_loss
+    setting.ignore_latest_weekly = args.daytrade or args.dayshort
     return setting
 
 def create_simulator_data(param):
@@ -81,7 +82,13 @@ def create_simulator_data(param):
     settings = strategy.LoadSettings()
     settings.with_stats = False # startegy_simlator側で各足毎に統計値を出力するのでここでは計算しない
 
-    data = strategy.load_simulator_data(code, start_date, end_date, args, settings)
+    cacher = cache.Cache("/tmp/simulator")
+    name = "_".join([create_cache_name(args), str(code), start_date, end_date])
+    if cacher.exists(name):
+        data = cacher.get(name)
+    else:
+        data = strategy.load_simulator_data(code, start_date, end_date, args, settings)
+        cacher.create(name, data)
     return data
 
 def load_index(args, start_date, end_date):
