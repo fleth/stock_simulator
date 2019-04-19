@@ -135,34 +135,38 @@ def get_score(args, scores, simulator_setting, strategy_setting):
 def get_score_stats(scores):
     gain = list(map(lambda x: x["gain"], scores))
     win = list(filter(lambda x: x > 0, gain))
-    loss = list(filter(lambda x: x < 0, gain))
+    lose = list(filter(lambda x: x < 0, gain))
     drawdown = list(map(lambda x: x["drawdown"], scores))
     max_drawdown = list(map(lambda x: x["max_drawdown"], scores))
     trade = list(map(lambda x: x["trade"], scores))
     win_trade = list(map(lambda x: x["win_trade"], scores))
-    profit_factor = sum(win) / abs(sum(loss)) if abs(sum(loss)) > 0 else sum(win)
+    profit_factor = sum(win) / abs(sum(lose)) if abs(sum(lose)) > 0 else sum(win)
     gain_per_trade = sum(gain) / sum(trade) if sum(trade) > 0 else 0
 
     return {
         "gain": gain,
         "win": win,
-        "loss": loss,
+        "lose": lose,
         "drawdown": drawdown,
         "max_drawdown": max_drawdown,
-        "trade": trade,
         "profit_factor": profit_factor,
         "gain_per_trade": gain_per_trade,
+        "trade": trade,
         "win_trade": win_trade
     }
 
 def print_score_stats(name, score, score_stats, assets, strategy_setting):
     stats = [
-        "max_drawdown", max(score_stats["max_drawdown"]),
-        "min_gain:", min(score_stats["gain"]) / assets,
-        "sum_gain:", sum(score_stats["gain"]),
-        "pf:", score_stats["profit_factor"],
-        "gpt:", score_stats["gain_per_trade"],
-        "t:", sum(score_stats["trade"])]
+        "max_dd", round(max(score_stats["max_drawdown"]), 2),
+        "min:", round(min(score_stats["gain"]) / assets, 2),
+        "max:", round(max(score_stats["gain"]) / assets, 2),
+        "sum:", sum(score_stats["gain"]),
+        "win:", sum(score_stats["win"]),
+        "lose:", sum(score_stats["lose"]),
+        "pf:", round(score_stats["profit_factor"], 2),
+        "gpt:", round(score_stats["gain_per_trade"], 2),
+        "t:", sum(score_stats["trade"]),
+        "wt:", sum(score_stats["win_trade"])]
 
     print(name, stats, score)
     setting = {"name": name, "stats": stats, "score": score, "setting": strategy.strategy_setting_to_dict(strategy_setting)}
@@ -316,6 +320,7 @@ def output_setting(args, strategy_setting, score, validate_score, strategy_simul
             "validate_score": int(validate_score),
             "monitor_size": monitor_size,
             "monitor_size_ratio": monitor_size_ratio,
+            "stop_loss_rate": args.stop_loss_rate,
             "setting": strategy_setting.__dict__
         }))
 
