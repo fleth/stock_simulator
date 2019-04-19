@@ -48,6 +48,7 @@ parser.add_argument("--upload", action="store_true", default=False, dest="upload
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
 parser.add_argument("--auto_stop_loss", action="store_true", default=False, dest="auto_stop_loss", help="自動損切")
 parser.add_argument("--stop_loss_rate", type=float, action="store", default=0.02, dest="stop_loss_rate", help="損切レート")
+parser.add_argument("--taking_rate", type=float, action="store", default=0.005, dest="taking_rate", help="利食いレート")
 parser.add_argument("--monitor_size_optimize", action="store_true", default=False, dest="monitor_size_optimize", help="監視対象の最適化")
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser = strategy.add_options(parser)
@@ -70,6 +71,8 @@ def create_setting(args, assets):
     setting.sizing = False
     setting.short_trade = args.short
     setting.auto_stop_loss = args.auto_stop_loss
+    setting.stop_loss_rate = args.stop_loss_rate
+    setting.taking_rate = args.taking_rate
     setting.ignore_latest_weekly = args.daytrade or args.dayshort
     return setting
 
@@ -321,6 +324,7 @@ def output_setting(args, strategy_setting, score, validate_score, strategy_simul
             "monitor_size": monitor_size,
             "monitor_size_ratio": monitor_size_ratio,
             "stop_loss_rate": args.stop_loss_rate,
+            "taking_rate": args.taking_rate,
             "setting": strategy_setting.__dict__
         }))
 
