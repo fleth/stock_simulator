@@ -302,7 +302,8 @@ def create_performance(simulator_setting, performances):
         "max_drawdown": [max(list(map(lambda x: x["max_drawdown"], performances.values())))],
         "max_position_term": [max(list(map(lambda x: x["max_position_term"], performances.values())))],
         "max_position_size": [max(list(map(lambda x: x["max_position_size"], performances.values())))],
-        "average_trade_size": average_trade_size
+        "average_trade_size": average_trade_size,
+        "max_unavailable_assets": max(list(map(lambda x: x["max_unavailable_assets"], performances.values())))
     }
     print(json.dumps(result))
 
