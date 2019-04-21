@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import sys
 import pandas
 import json
@@ -368,6 +369,8 @@ def walkforward(args, data, terms, strategy_simulator):
 print(utils.timestamp())
 proc_start_time = time.time()
 
+if not os.path.exists("settings"):
+    os.mkdir("settings")
 
 if args.assets is None:
     assets = Loader.assets()
