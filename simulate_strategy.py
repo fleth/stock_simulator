@@ -232,6 +232,7 @@ def simulate_by_term(param):
 def simulate_by_multiple_term(strategy_setting, datas, terms, strategy_simulator):
     tick = datas["args"].tick
     params = []
+    strategy_simulator.simulator_setting.strategy["daily"] = None
     for term in terms:
         # term毎にデータを分けてシミュレートした結果の平均をスコアとして返す
         start = utils.to_format_by_term(term["start_date"], tick)
