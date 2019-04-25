@@ -116,12 +116,18 @@ def load(args, codes, terms, daterange):
     data = {}
     params = list(map(lambda x: {"code": x, "start_date": utils.to_format(daterange[x][0]), "end_date": utils.to_format(daterange[x][-1]), "args": args}, codes))
 
-    p = Pool(8)
-    ret = p.map(create_simulator_data, params)
-    for r in ret:
-        if r is None:
-            continue
-        data[r.code] = r
+    try:
+        p = Pool(8)
+        ret = p.map(create_simulator_data, params)
+        for r in ret:
+            if r is None:
+                continue
+            data[r.code] = r
+    except KeyboardInterrupt:
+        p.close()
+        exit()
+    finally:
+        p.close()
 
     index = load_index(args, start_date, end_date)
 
@@ -171,7 +177,7 @@ def print_score_stats(name, score, score_stats, assets, strategy_setting):
         "t:", sum(score_stats["trade"]),
         "wt:", sum(score_stats["win_trade"])]
 
-    print(name, stats, score)
+    print(utils.timestamp(), name, stats, score)
     setting = {"name": name, "stats": stats, "score": score, "setting": strategy.strategy_setting_to_dict(strategy_setting)}
     with open("settings/simulate.log", "a") as f:
         f.write(json.dumps(setting))
@@ -218,16 +224,28 @@ def get_tick_score(scores, simulator_setting, strategy_setting):
 
     return score
 
+def simulate_by_term(param):
+    strategy_simulator = param[0]
+    return strategy_simulator.simulates(*param[1:])
+
 # 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
 def simulate_by_multiple_term(strategy_setting, datas, terms, strategy_simulator):
-    scores = []
     tick = datas["args"].tick
+    params = []
     for term in terms:
         # term毎にデータを分けてシミュレートした結果の平均をスコアとして返す
         start = utils.to_format_by_term(term["start_date"], tick)
         end = utils.to_format_by_term(term["end_date"], tick)
-        stats = strategy_simulator.simulates(strategy_setting, datas, start, end, datas["args"].verbose)
-        scores.append(stats)
+        params.append((strategy_simulator, strategy_setting, datas, start, end, datas["args"].verbose))
+
+    try:
+        p = Pool(int(datas["args"].jobs/2))
+        scores = p.map(simulate_by_term, params)
+    except KeyboardInterrupt:
+        p.close()
+        exit()
+    finally:
+        p.close()
     return scores
 
 # パラメータ評価用の関数
@@ -254,7 +272,7 @@ def strategy_optimize(args, datas, terms, strategy_simulator):
     random_state = int(time.time()) if args.random > 0 else None
     res_gp = gp_minimize(
         lambda x: objective(args, strategy_setting.by_array(x), datas, terms, strategy_simulator),
-        space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state, n_jobs=args.jobs)
+        space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state)
     result = strategy_setting.by_array(res_gp.x)
     score = res_gp.fun
     print("done strategy_optimize: %s random_state:%s" % (utils.timestamp(), random_state))
