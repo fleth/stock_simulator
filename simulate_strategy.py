@@ -48,6 +48,7 @@ parser.add_argument("--output", action="store_true", default=False, dest="output
 parser.add_argument("--upload", action="store_true", default=False, dest="upload", help="結果をslackに送信する")
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
 parser.add_argument("--auto_stop_loss", action="store_true", default=False, dest="auto_stop_loss", help="自動損切")
+parser.add_argument("--use_optimized_init", action="store_true", default=False, dest="use_optimized_init", help="初期値に最適化後の設定を使う")
 parser.add_argument("--stop_loss_rate", type=float, action="store", default=0.02, dest="stop_loss_rate", help="損切レート")
 parser.add_argument("--taking_rate", type=float, action="store", default=0.005, dest="taking_rate", help="利食いレート")
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
@@ -212,7 +213,8 @@ def get_tick_score(scores, simulator_setting, strategy_setting):
 #        len(list(filter(lambda x: x > 0, gain))) < len(scores) / 2, # 利益が出ている期間が半分以下
         sum(score_stats["gain"]) <= 0, # 損益がマイナス
 #        sum(score_stats["trade"]) < 30, # 取引数が少ない
-        score_stats["profit_factor"] < 1.5, # プロフィットファクター（総純利益 / 総損失）が1.5以下
+#        score_stats["profit_factor"] < 1.5, # プロフィットファクター（総純利益 / 総損失）が1.5以下
+        score_stats["profit_factor"] < 1.1, # プロフィットファクター（総純利益 / 総損失）が1.5以下
 #        gain_per_trade < 5000, # 1トレードあたりの平均利益が5000円以下
     ]
 
@@ -263,7 +265,7 @@ def objective(args, strategy_setting, datas, terms, strategy_simulator):
         score = 0
     return -score
 
-def strategy_optimize(args, datas, terms, strategy_simulator):
+def strategy_optimize(args, datas, terms, strategy_simulator, optimized=None):
     print("strategy_optimize: %s" % (utils.timestamp()))
     strategy_setting = strategy.StrategySetting()
 
@@ -271,9 +273,10 @@ def strategy_optimize(args, datas, terms, strategy_simulator):
     space = strategy_simulator.strategy_creator.ranges()
     n_random_starts = int(args.n_calls/10) if args.random > 0 else 10
     random_state = int(time.time()) if args.random > 0 else None
+    init = strategy.strategy_setting_to_array(optimized) if args.use_optimized_init else None
     res_gp = gp_minimize(
         lambda x: objective(args, strategy_setting.by_array(x), datas, terms, strategy_simulator),
-        space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state)
+        space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state, x0=init)
     result = strategy_setting.by_array(res_gp.x)
     score = res_gp.fun
     print("done strategy_optimize: %s random_state:%s" % (utils.timestamp(), random_state))
@@ -353,7 +356,8 @@ def walkforward(args, data, terms, strategy_simulator):
     # 最適化
     if args.optimize_count > 0 and not args.ignore_optimize:
         d = copy.deepcopy(data)
-        strategy_setting, score = strategy_optimize(args, data, terms, strategy_simulator)
+        _, optimized = strategy.load_strategy_setting(args)
+        strategy_setting, score = strategy_optimize(args, data, terms, strategy_simulator, optimized=optimized)
         objective(args, strategy_setting, data, terms, strategy_simulator) # 選ばれた戦略スコアを表示するため
         print(strategy_setting.__dict__)
     else:
