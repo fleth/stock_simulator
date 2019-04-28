@@ -90,6 +90,7 @@ def create_simulator_data(param):
     name = "_".join([create_cache_name(args), str(code), start_date, end_date])
     if cacher.exists(name):
         data = cacher.get(name)
+        print("cache loaded:", code, start_date, end_date)
     else:
         data = strategy.load_simulator_data(code, start_date, end_date, args, settings)
         cacher.create(name, data)
