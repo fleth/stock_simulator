@@ -94,6 +94,7 @@ def create_simulator_data(param):
     else:
         data = strategy.load_simulator_data(code, start_date, end_date, args, settings)
         cacher.create(name, data)
+
     return data
 
 def load_index(args, start_date, end_date):
@@ -108,7 +109,7 @@ def load_index(args, start_date, end_date):
 
     return index
 
-def load(args, codes, terms, daterange):
+def load(args, codes, terms, daterange, strategy_creator):
     min_start_date = min(list(map(lambda x: x["start_date"], terms)))
     prepare_term = utils.relativeterm(args.validate_term, args.tick)
     start_date = utils.to_format(min_start_date - prepare_term)
@@ -124,7 +125,8 @@ def load(args, codes, terms, daterange):
         for r in ret:
             if r is None:
                 continue
-            data[r.code] = r
+            print("add_data: ", utils.timestamp(), r.code)
+            data[r.code] = strategy_creator.add_data(r)
     except KeyboardInterrupt:
         p.close()
         exit()
@@ -235,7 +237,7 @@ def simulate_by_term(param):
 def simulate_by_multiple_term(strategy_setting, datas, terms, strategy_simulator):
     tick = datas["args"].tick
     params = []
-    strategy_simulator.simulator_setting.strategy["daily"] = None
+    strategy_simulator.simulator_setting.strategy = None
     for term in terms:
         # term毎にデータを分けてシミュレートした結果の平均をスコアとして返す
         start = utils.to_format_by_term(term["start_date"], tick)
@@ -420,7 +422,7 @@ codes, validate_codes, daterange = strategy_simulator.select_codes(args, start, 
 
 print("target : %s" % codes)
 
-data = load(args, codes, terms, daterange)
+data = load(args, codes, terms, daterange, strategy_creator)
 
 # 期間ごとに最適化
 terms = sorted(terms, key=lambda x: x["start_date"])
