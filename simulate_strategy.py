@@ -69,7 +69,6 @@ def create_setting(args, assets):
     setting.assets = assets
     setting.commission = 150
     setting.debug = args.verbose
-    setting.sizing = False
     setting.short_trade = args.short
     setting.auto_stop_loss = args.auto_stop_loss
     setting.stop_loss_rate = args.stop_loss_rate
