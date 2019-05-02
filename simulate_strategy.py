@@ -74,7 +74,7 @@ def create_setting(args, assets):
     setting.auto_stop_loss = args.auto_stop_loss
     setting.stop_loss_rate = args.stop_loss_rate
     setting.taking_rate = args.taking_rate
-    setting.ignore_latest_weekly = args.daytrade or args.dayshort
+    setting.ignore_latest_weekly = args.daytrade
     return setting
 
 def create_simulator_data(param):
