@@ -105,7 +105,9 @@ def load_index(args, start_date, end_date):
 
     for k in ["nikkei"]:
         d = Loader.load_index(k, start_date, end_date, with_filter=True, strict=False)
-        index[k] = utils.add_index_stats(d)
+        d = utils.add_stats(d)
+        d = utils.add_cs_stats(d)
+        index[k] = d
 
     return index
 
