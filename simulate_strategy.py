@@ -8,6 +8,7 @@ import numpy
 import copy
 import subprocess
 import datetime
+import random
 from skopt import gp_minimize
 from multiprocessing import Pool
 from argparse import ArgumentParser
@@ -45,7 +46,6 @@ parser.add_argument("-n", "--n_calls", type=int, action="store", default=100, he
 parser.add_argument("-j", "--jobs", type=int, action="store", default=8, dest="jobs", help="実行ジョブ数")
 parser.add_argument("-v", action="store_true", default=False, dest="verbose", help="debug log")
 parser.add_argument("--output", action="store_true", default=False, dest="output", help="設定をファイルに出力")
-parser.add_argument("--upload", action="store_true", default=False, dest="upload", help="結果をslackに送信する")
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
 parser.add_argument("--auto_stop_loss", action="store_true", default=False, dest="auto_stop_loss", help="自動損切")
 parser.add_argument("--use_optimized_init", action="store_true", default=False, dest="use_optimized_init", help="初期値に最適化後の設定を使う")
@@ -109,11 +109,12 @@ def load_index(args, start_date, end_date):
 
     return index
 
-def load(args, codes, terms, daterange, strategy_creator):
+def load(args, codes, terms, daterange, combination_setting):
     min_start_date = min(list(map(lambda x: x["start_date"], terms)))
     prepare_term = utils.relativeterm(args.validate_term, args.tick)
     start_date = utils.to_format(min_start_date - prepare_term)
     end_date = utils.format(args.date)
+    strategy_creator = strategy.load_strategy_creator(args, combination_setting)
 
     print("loading %s %s %s" % (len(codes), start_date, end_date))
     data = {}
@@ -242,7 +243,7 @@ def simulate_by_multiple_term(strategy_setting, datas, terms, strategy_simulator
         # term毎にデータを分けてシミュレートした結果の平均をスコアとして返す
         start = utils.to_format_by_term(term["start_date"], tick)
         end = utils.to_format_by_term(term["end_date"], tick)
-        params.append((strategy_simulator, strategy_setting, datas, start, end, datas["args"].verbose))
+        params.append((strategy_simulator, strategy_setting, datas, start, end))
 
     try:
         p = Pool(int(datas["args"].jobs/2))
@@ -273,7 +274,7 @@ def strategy_optimize(args, datas, terms, strategy_simulator, optimized=None):
     strategy_setting = strategy.StrategySetting()
 
     # 現在の期間で最適な戦略を選択
-    space = strategy_simulator.strategy_creator.ranges()
+    space = strategy_simulator.strategy_creator(args).ranges()
     n_random_starts = int(args.n_calls/10) if args.random > 0 else 10
     random_state = int(time.time()) if args.random > 0 else None
     init = strategy.strategy_setting_to_array(optimized) if args.use_optimized_init else None
@@ -308,8 +309,6 @@ def create_terms(args):
     return terms, validate_terms
 
 def create_performance(simulator_setting, performances):
-    print(json.dumps(performances))
-
     # レポート出力
     with open("settings/performance.json", "w") as f:
         f.write(json.dumps(performances))
@@ -322,24 +321,20 @@ def create_performance(simulator_setting, performances):
     average_trade_size = numpy.average(list(map(lambda x: len(x["codes"]), performances.values())))
 
     result = {
-        "gain": [gain],
-        "return": [gain / simulator_setting.assets],
-        "max_drawdown": [max(list(map(lambda x: x["max_drawdown"], performances.values())))],
-        "max_position_term": [max(list(map(lambda x: x["max_position_term"], performances.values())))],
-        "max_position_size": [max(list(map(lambda x: x["max_position_size"], performances.values())))],
-        "average_trade_size": average_trade_size,
+        "gain": gain,
+        "return": round(gain / simulator_setting.assets),
+        "max_drawdown": max(list(map(lambda x: x["max_drawdown"], performances.values()))),
+        "max_position_term": max(list(map(lambda x: x["max_position_term"], performances.values()))),
+        "max_position_size": max(list(map(lambda x: x["max_position_size"], performances.values()))),
+        "average_trade_size": round(average_trade_size),
         "max_unavailable_assets": max(list(map(lambda x: x["max_unavailable_assets"], performances.values())))
     }
     print(json.dumps(result))
 
-    if args.upload:
-        detail = pandas.DataFrame(result)
-        detail.to_csv("settings/simulates.csv", index=None)
-        slack.file_post("csv", "settings/simulates.csv", channel="stock_alert")
     return result
 
 def output_setting(args, strategy_setting, score, validate_score, strategy_simulator, report):
-    monitor_size = strategy_simulator.strategy_creator.setting.monitor_size
+    monitor_size = strategy_simulator.combination_setting.monitor_size
     monitor_size_ratio = monitor_size / report["average_trade_size"]
     with open("settings/%s" % strategy.get_filename(args), "w") as f:
         f.write(json.dumps({
@@ -351,13 +346,16 @@ def output_setting(args, strategy_setting, score, validate_score, strategy_simul
             "monitor_size_ratio": monitor_size_ratio,
             "stop_loss_rate": args.stop_loss_rate,
             "taking_rate": args.taking_rate,
-            "setting": strategy_setting.__dict__
+            "setting": strategy_setting.__dict__,
+            "seed": strategy_simulator.combination_setting.seed,
+            "report": report,
         }))
 
 def walkforward(args, data, terms, strategy_simulator):
     performances = {}
     # 最適化
     if args.optimize_count > 0 and not args.ignore_optimize:
+        strategy_simulator.combination_setting.seed = time.time()
         d = copy.deepcopy(data)
         _, optimized = strategy.load_strategy_setting(args)
         strategy_setting, score = strategy_optimize(args, data, terms, strategy_simulator, optimized=optimized)
@@ -372,19 +370,20 @@ def walkforward(args, data, terms, strategy_simulator):
     # 検証
     terms = sorted(validate_terms, key=lambda x: x["start_date"])
     for term in terms:
-        print(term)
         start_date = utils.to_format_by_term(term["start_date"], args.tick)
         end_date = utils.to_format_by_term(term["end_date"], args.tick)
         # 検証期間で結果を試す
         d = copy.deepcopy(data)
-        result = strategy_simulator.simulates(strategy_setting, d, start_date, end_date, True)
+        result = strategy_simulator.simulates(strategy_setting, d, start_date, end_date)
 
         performances[utils.to_format(utils.to_datetime_by_term(end_date, args.tick))] = result
 
-    # 結果の表示 =============================================================================
-    report = create_performance(strategy_simulator.simulator_setting, performances)
+    # 検証スコア
     validate_score = -get_score(args, performances.values(), strategy_simulator.simulator_setting, strategy_setting)
     print(validate_score)
+
+    # 結果の表示 =============================================================================
+    report = create_performance(strategy_simulator.simulator_setting, performances)
 
     if args.output:
         output_setting(args, strategy_setting, score, validate_score, strategy_simulator, report)
@@ -406,7 +405,6 @@ else:
 # 戦略の選択
 combination_setting = strategy.create_combination_setting(args)
 combination_setting.montecarlo = args.montecarlo
-strategy_creator = strategy.load_strategy_creator(args, combination_setting)
 
 # 翌期間用の設定を出力する
 # 都度読み込むと遅いので全部読み込んでおく
@@ -417,12 +415,12 @@ end = utils.to_datetime(args.date)
 if args.tick:
     end = end + datetime.timedelta(hours=9)
 end = utils.to_format_by_term(end, args.tick)
-strategy_simulator = StrategySimulator(simulate_setting, strategy_creator, verbose=args.verbose)
+strategy_simulator = StrategySimulator(simulate_setting, combination_setting, verbose=args.verbose)
 codes, validate_codes, daterange = strategy_simulator.select_codes(args, start, end)
 
 print("target : %s" % codes)
 
-data = load(args, codes, terms, daterange, strategy_creator)
+data = load(args, codes, terms, daterange, combination_setting)
 
 # 期間ごとに最適化
 terms = sorted(terms, key=lambda x: x["start_date"])
@@ -441,6 +439,7 @@ if args.random > 0:
 
     for i in range(args.random):
         walkforward(args, data, terms, strategy_simulator)
+
         filename = strategy.get_filename(args)
         params = ["cp", "settings/%s" % (filename), "settings/tmp/%s_%s" % (i, filename)]
         subprocess.call(params)
