@@ -235,19 +235,29 @@ def simulate_by_term(param):
     strategy_simulator = param[0]
     return strategy_simulator.simulates(*param[1:])
 
+def select_data(codes, stocks):
+    select = {"data": {}, "index": stocks["index"], "args": stocks["args"]}
+
+    for code in codes:
+        select["data"][code] = stocks["data"][code]
+
+    return select
+
 # 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
-def simulate_by_multiple_term(strategy_setting, datas, terms, strategy_simulator):
-    tick = datas["args"].tick
+def simulate_by_multiple_term(strategy_setting, stocks, terms, strategy_simulator):
+    tick = stocks["args"].tick
     params = []
     strategy_simulator.simulator_setting.strategy = None
     for term in terms:
         # term毎にデータを分けてシミュレートした結果の平均をスコアとして返す
         start = utils.to_format_by_term(term["start_date"], tick)
         end = utils.to_format_by_term(term["end_date"], tick)
-        params.append((strategy_simulator, strategy_setting, datas, start, end))
+        codes, _, _ = strategy_simulator.select_codes(stocks["args"], start, end)
+        select = select_data(codes, stocks)
+        params.append((strategy_simulator, strategy_setting, select, start, end))
 
     try:
-        p = Pool(int(datas["args"].jobs/2))
+        p = Pool(int(stocks["args"].jobs))
         scores = p.map(simulate_by_term, params)
     except KeyboardInterrupt:
         p.close()
@@ -258,10 +268,10 @@ def simulate_by_multiple_term(strategy_setting, datas, terms, strategy_simulator
 
 # パラメータ評価用の関数
 # 指定戦略を全銘柄に対して最適化
-def objective(args, strategy_setting, datas, terms, strategy_simulator):
+def objective(args, strategy_setting, stocks, terms, strategy_simulator):
     print(strategy_setting.__dict__)
     try:
-        scores = simulate_by_multiple_term(strategy_setting, datas, terms, strategy_simulator)
+        scores = simulate_by_multiple_term(strategy_setting, stocks, terms, strategy_simulator)
         score = get_score(args, scores, strategy_simulator.simulator_setting, strategy_setting)
     except Exception as e:
         print("skip objective. %s" % e)
@@ -270,7 +280,7 @@ def objective(args, strategy_setting, datas, terms, strategy_simulator):
         score = 0
     return -score
 
-def strategy_optimize(args, datas, terms, strategy_simulator, optimized=None):
+def strategy_optimize(args, stocks, terms, strategy_simulator, optimized=None):
     print("strategy_optimize: %s" % (utils.timestamp()))
     strategy_setting = strategy.StrategySetting()
 
@@ -280,7 +290,7 @@ def strategy_optimize(args, datas, terms, strategy_simulator, optimized=None):
     random_state = int(time.time()) if args.random > 0 else None
     init = strategy.strategy_setting_to_array(optimized) if args.use_optimized_init else None
     res_gp = gp_minimize(
-        lambda x: objective(args, strategy_setting.by_array(x), datas, terms, strategy_simulator),
+        lambda x: objective(args, strategy_setting.by_array(x), stocks, terms, strategy_simulator),
         space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state, x0=init)
     result = strategy_setting.by_array(res_gp.x)
     score = res_gp.fun
@@ -407,6 +417,8 @@ else:
 combination_setting = strategy.create_combination_setting(args)
 combination_setting.montecarlo = args.montecarlo
 
+strategy_simulator = StrategySimulator(simulate_setting, combination_setting, verbose=args.verbose)
+
 # 翌期間用の設定を出力する
 # 都度読み込むと遅いので全部読み込んでおく
 terms, validate_terms = create_terms(args)
@@ -416,7 +428,6 @@ end = utils.to_datetime(args.date)
 if args.tick:
     end = end + datetime.timedelta(hours=9)
 end = utils.to_format_by_term(end, args.tick)
-strategy_simulator = StrategySimulator(simulate_setting, combination_setting, verbose=args.verbose)
 codes, validate_codes, daterange = strategy_simulator.select_codes(args, start, end)
 
 print("target : %s" % codes)
