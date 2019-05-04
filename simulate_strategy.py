@@ -333,12 +333,14 @@ def create_performance(simulator_setting, performances):
 
     result = {
         "gain": gain,
-        "return": round(gain / simulator_setting.assets),
+        "return": round(gain / simulator_setting.assets, 3),
         "max_drawdown": max(list(map(lambda x: x["max_drawdown"], performances.values()))),
         "max_position_term": max(list(map(lambda x: x["max_position_term"], performances.values()))),
         "max_position_size": max(list(map(lambda x: x["max_position_size"], performances.values()))),
         "average_trade_size": round(average_trade_size),
-        "max_unavailable_assets": max(list(map(lambda x: x["max_unavailable_assets"], performances.values())))
+        "max_unavailable_assets": max(list(map(lambda x: x["max_unavailable_assets"], performances.values()))),
+        "trade": sum(list(map(lambda x: x["trade"], performances.values()))),
+        "win_trade": sum(list(map(lambda x: x["win_trade"], performances.values()))),
     }
     print(json.dumps(result))
 
