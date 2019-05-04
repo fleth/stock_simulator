@@ -368,7 +368,8 @@ def walkforward(args, data, terms, strategy_simulator):
     performances = {}
     # 最適化
     if args.optimize_count > 0 and not args.ignore_optimize:
-        strategy_simulator.combination_setting.seed = time.time()
+        if not args.use_optimized_init:
+            strategy_simulator.combination_setting.seed = time.time()
         d = copy.deepcopy(data)
         _, optimized = strategy.load_strategy_setting(args)
         strategy_setting, score = strategy_optimize(args, data, terms, strategy_simulator, optimized=optimized)
