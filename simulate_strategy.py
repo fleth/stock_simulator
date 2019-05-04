@@ -360,6 +360,7 @@ def output_setting(args, strategy_setting, score, validate_score, strategy_simul
             "validate_score": int(validate_score),
             "monitor_size": monitor_size,
             "monitor_size_ratio": monitor_size_ratio,
+            "position_sizing": args.position_sizing,
             "stop_loss_rate": args.stop_loss_rate,
             "taking_rate": args.taking_rate,
             "setting": strategy_setting.__dict__,
