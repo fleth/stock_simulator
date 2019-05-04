@@ -40,7 +40,6 @@ parser.add_argument("validate_term", type=int) # 最適化期間の10~20%
 parser.add_argument("--ignore_optimize", action="store_true", default=False, dest="ignore_optimize", help="最適化を実施しない")
 parser.add_argument("-o", type=int, action="store", default=0, dest="optimize_count", help="最適化期間の数")
 parser.add_argument("-c", type=int, action="store", default=1, dest="count", help="検証期間の数")
-parser.add_argument("--code", type=str, action="store", default=None, help="code")
 parser.add_argument("--assets", type=int, action="store", default=None, dest="assets", help="assets")
 parser.add_argument("-n", "--n_calls", type=int, action="store", default=100, help="simulate n_calls")
 parser.add_argument("-j", "--jobs", type=int, action="store", default=8, dest="jobs", help="実行ジョブ数")
@@ -349,7 +348,11 @@ def create_performance(simulator_setting, performances):
 def output_setting(args, strategy_setting, score, validate_score, strategy_simulator, report):
     monitor_size = strategy_simulator.combination_setting.monitor_size
     monitor_size_ratio = monitor_size / report["average_trade_size"]
-    with open("settings/%s" % strategy.get_filename(args), "w") as f:
+    filename = "simulate_settings/%s" % strategy.get_filename(args)
+    output_dir = os.path.dirname(filename)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    with open(filename, "w") as f:
         f.write(json.dumps({
             "date": args.date,
             "term": args.validate_term,
@@ -407,9 +410,6 @@ def walkforward(args, data, terms, strategy_simulator):
 print(utils.timestamp())
 proc_start_time = time.time()
 
-if not os.path.exists("settings"):
-    os.mkdir("settings")
-
 if args.assets is None:
     assets = Loader.assets()
     simulate_setting = create_setting(args, assets["assets"])
@@ -446,17 +446,17 @@ subprocess.call(params)
 
 if args.random > 0:
     # 指定回数ランダムで最適化して検証スコアが高い
-    params = ["rm", "-rf", "settings/tmp"]
+    params = ["rm", "-rf", "simulate_settings/tmp"]
     subprocess.call(params)
 
-    params = ["mkdir", "settings/tmp"]
+    params = ["mkdir", "simulate_settings/tmp"]
     subprocess.call(params)
 
     for i in range(args.random):
         walkforward(args, data, terms, strategy_simulator)
 
         filename = strategy.get_filename(args)
-        params = ["cp", "settings/%s" % (filename), "settings/tmp/%s_%s" % (i, filename)]
+        params = ["cp", "simulate_settings/%s" % (filename), "simulate_settings/tmp/%s_%s" % (i, filename)]
         subprocess.call(params)
 
     params = ["sh", "simulator/copy_highest_score_setting.sh", strategy.get_prefix(args)]
