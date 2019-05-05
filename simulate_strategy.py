@@ -48,8 +48,6 @@ parser.add_argument("--output", action="store_true", default=False, dest="output
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
 parser.add_argument("--auto_stop_loss", action="store_true", default=False, dest="auto_stop_loss", help="自動損切")
 parser.add_argument("--use_optimized_init", action="store_true", default=False, dest="use_optimized_init", help="初期値に最適化後の設定を使う")
-parser.add_argument("--stop_loss_rate", type=float, action="store", default=0.02, dest="stop_loss_rate", help="損切レート")
-parser.add_argument("--taking_rate", type=float, action="store", default=0.005, dest="taking_rate", help="利食いレート")
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
@@ -63,16 +61,12 @@ def create_cache_name(args):
     return "%s%s" % (prefix, "_".join(params))
 
 def create_setting(args, assets):
-    setting = SimulatorSetting()
+    setting = strategy.create_simulator_setting(args)
     setting.min_data_length = args.validate_term * 10
     setting.assets = assets
     setting.commission = 150
     setting.debug = args.verbose
-    setting.short_trade = args.short
     setting.auto_stop_loss = args.auto_stop_loss
-    setting.stop_loss_rate = args.stop_loss_rate
-    setting.taking_rate = args.taking_rate
-    setting.ignore_latest_weekly = args.daytrade
     return setting
 
 def create_simulator_data(param):
@@ -356,13 +350,15 @@ def output_setting(args, strategy_setting, score, validate_score, strategy_simul
         f.write(json.dumps({
             "date": args.date,
             "term": args.validate_term,
-            "score": int(score),
+            "score": int(score) * int(validate_score) * -1,
+            "optimize_score": int(score),
             "validate_score": int(validate_score),
             "monitor_size": monitor_size,
             "monitor_size_ratio": monitor_size_ratio,
-            "position_sizing": args.position_sizing,
-            "stop_loss_rate": args.stop_loss_rate,
-            "taking_rate": args.taking_rate,
+            "max_position_size": strategy_simulator.combination_setting.max_position_size,
+            "position_sizing": strategy_simulator.combination_setting.position_sizing,
+            "stop_loss_rate": strategy_simulator.simulator_setting.stop_loss_rate,
+            "taking_rate": strategy_simulator.simulator_setting.taking_rate,
             "setting": strategy_setting.__dict__,
             "seed": strategy_simulator.combination_setting.seed,
             "report": report,
