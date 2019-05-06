@@ -47,6 +47,7 @@ parser.add_argument("-v", action="store_true", default=False, dest="verbose", he
 parser.add_argument("--output", action="store_true", default=False, dest="output", help="設定をファイルに出力")
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
 parser.add_argument("--auto_stop_loss", action="store_true", default=False, dest="auto_stop_loss", help="自動損切")
+parser.add_argument("--apply_compound_interest", action="store_true", default=False, dest="apply_compound_interest", help="複利を適用")
 parser.add_argument("--use_optimized_init", action="store_true", default=False, dest="use_optimized_init", help="初期値に最適化後の設定を使う")
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser = strategy.add_options(parser)
@@ -389,6 +390,10 @@ def walkforward(args, data, terms, strategy_simulator):
         # 検証期間で結果を試す
         d = copy.deepcopy(data)
         result = strategy_simulator.simulates(strategy_setting, d, start_date, end_date)
+
+        if args.apply_compound_interest: # 複利を適用
+            strategy_simulator.simulator_setting.assets += result["gain"]
+            print("assets:", strategy_simulator.simulator_setting.assets, result["gain"])
 
         performances[utils.to_format(utils.to_datetime_by_term(end_date, args.tick))] = result
 

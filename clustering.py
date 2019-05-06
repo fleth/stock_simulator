@@ -20,7 +20,7 @@ start_date = utils.format(args.start_date)
 end_date = utils.format(args.end_date)
 
 # データ読み込み
-codes = Loader.simulate_stocks()
+codes = Loader.high_performance_stocks()
 
 stock_data = []
 for code in codes:
