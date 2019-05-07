@@ -454,10 +454,13 @@ if args.random > 0:
     params = ["mkdir", "simulate_settings/tmp"]
     subprocess.call(params)
 
+    filename = strategy.get_filename(args)
+    params = ["cp", "simulate_settings/%s" % (filename), "simulate_settings/tmp/default_%s" % filename]
+    subprocess.call(params)
+
     for i in range(args.random):
         walkforward(args, data, terms, strategy_simulator)
 
-        filename = strategy.get_filename(args)
         params = ["cp", "simulate_settings/%s" % (filename), "simulate_settings/tmp/%s_%s" % (i, filename)]
         subprocess.call(params)
 
