@@ -274,7 +274,7 @@ def objective(args, strategy_setting, stocks, terms, strategy_simulator):
         score = 0
     return -score
 
-def strategy_optimize(args, stocks, terms, strategy_simulator, optimized=None):
+def strategy_optimize(args, stocks, terms, strategy_simulator):
     print("strategy_optimize: %s" % (utils.timestamp()))
     strategy_setting = strategy.StrategySetting()
 
@@ -282,10 +282,9 @@ def strategy_optimize(args, stocks, terms, strategy_simulator, optimized=None):
     space = strategy_simulator.strategy_creator(args).ranges()
     n_random_starts = int(args.n_calls/10) if args.random > 0 else 10
     random_state = int(time.time()) if args.random > 0 else None
-    init = strategy.strategy_setting_to_array(optimized) if args.use_optimized_init else None
     res_gp = gp_minimize(
         lambda x: objective(args, strategy_setting.by_array(x), stocks, terms, strategy_simulator),
-        space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state, x0=init)
+        space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state)
     result = strategy_setting.by_array(res_gp.x)
     score = res_gp.fun
     print("done strategy_optimize: %s random_state:%s" % (utils.timestamp(), random_state))
@@ -375,8 +374,7 @@ def walkforward(args, data, terms, strategy_simulator, combination_setting):
             strategy_simulator.combination_setting.seed = combination_setting.seed[:args.use_optimized_init] + [time.time()]
 
         d = copy.deepcopy(data)
-        _, optimized = strategy.load_strategy_setting(args)
-        strategy_setting, score = strategy_optimize(args, data, terms, strategy_simulator, optimized=optimized)
+        strategy_setting, score = strategy_optimize(args, data, terms, strategy_simulator)
         objective(args, strategy_setting, data, terms, strategy_simulator) # 選ばれた戦略スコアを表示するため
         print(strategy_setting.__dict__)
     else:
@@ -421,8 +419,10 @@ if args.assets is None:
 else:
     simulate_setting = create_setting(args, args.assets)
 
-# 戦略の選択
-combination_setting = strategy.create_combination_setting(args)
+if args.optimize_count > 0 and not args.ignore_optimize and args.use_optimized_init == 0:
+    combination_setting = strategy.create_combination_setting(args, use_json=False)
+else:
+    combination_setting = strategy.create_combination_setting(args)
 combination_setting.montecarlo = args.montecarlo
 
 strategy_simulator = StrategySimulator(simulate_setting, combination_setting, verbose=args.verbose)
