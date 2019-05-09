@@ -48,7 +48,7 @@ parser.add_argument("--output", action="store_true", default=False, dest="output
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
 parser.add_argument("--auto_stop_loss", action="store_true", default=False, dest="auto_stop_loss", help="自動損切")
 parser.add_argument("--apply_compound_interest", action="store_true", default=False, dest="apply_compound_interest", help="複利を適用")
-parser.add_argument("--use_optimized_init", action="store_true", default=False, dest="use_optimized_init", help="初期値に最適化後の設定を使う")
+parser.add_argument("--use_optimized_init", type=int, action="store", default=0, dest="use_optimized_init", help="どこまで初期値に最適化後の設定を使うか")
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
@@ -365,12 +365,15 @@ def output_setting(args, strategy_setting, score, validate_score, strategy_simul
             "report": report,
         }))
 
-def walkforward(args, data, terms, strategy_simulator):
+def walkforward(args, data, terms, strategy_simulator, combination_setting):
     performances = {}
     # 最適化
     if args.optimize_count > 0 and not args.ignore_optimize:
-        if not args.use_optimized_init:
-            strategy_simulator.combination_setting.seed = time.time()
+        if args.use_optimized_init == 0:
+            strategy_simulator.combination_setting.seed = [time.time()]
+        else:
+            strategy_simulator.combination_setting.seed = combination_setting.seed[:args.use_optimized_init] + [time.time()]
+
         d = copy.deepcopy(data)
         _, optimized = strategy.load_strategy_setting(args)
         strategy_setting, score = strategy_optimize(args, data, terms, strategy_simulator, optimized=optimized)
@@ -459,7 +462,7 @@ if args.random > 0:
     subprocess.call(params)
 
     for i in range(args.random):
-        walkforward(args, data, terms, strategy_simulator)
+        walkforward(args, data, terms, strategy_simulator, combination_setting)
 
         params = ["cp", "simulate_settings/%s" % (filename), "simulate_settings/tmp/%s_%s" % (i, filename)]
         subprocess.call(params)
@@ -467,7 +470,7 @@ if args.random > 0:
     params = ["sh", "simulator/copy_highest_score_setting.sh", strategy.get_prefix(args)]
     subprocess.call(params)
 else:
-    walkforward(args, data, terms, strategy_simulator)
+    walkforward(args, data, terms, strategy_simulator, combination_setting)
 
 print(utils.timestamp())
 proc_end_time = time.time()
