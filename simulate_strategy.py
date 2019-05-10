@@ -339,9 +339,9 @@ def create_performance(simulator_setting, performances):
 
     return result
 
-def output_setting(args, strategy_setting, score, validate_score, strategy_simulator, report):
+def output_setting(args, strategy_settings, score, validate_score, strategy_simulator, report):
     monitor_size = strategy_simulator.combination_setting.monitor_size
-    monitor_size_ratio = monitor_size / report["average_trade_size"]
+    monitor_size_ratio = (monitor_size / report["average_trade_size"]) if report["average_trade_size"] > 0 else 1
     filename = "simulate_settings/%s" % strategy.get_filename(args)
     output_dir = os.path.dirname(filename)
     if not os.path.exists(output_dir):
@@ -359,7 +359,7 @@ def output_setting(args, strategy_setting, score, validate_score, strategy_simul
             "position_sizing": strategy_simulator.combination_setting.position_sizing,
             "stop_loss_rate": strategy_simulator.simulator_setting.stop_loss_rate,
             "taking_rate": strategy_simulator.simulator_setting.taking_rate,
-            "setting": strategy_setting.__dict__,
+            "setting": list(map(lambda x: x.__dict__, strategy_settings)),
             "seed": strategy_simulator.combination_setting.seed,
             "report": report,
         }))
@@ -376,9 +376,10 @@ def walkforward(args, data, terms, strategy_simulator, combination_setting):
         d = copy.deepcopy(data)
         strategy_setting, score = strategy_optimize(args, data, terms, strategy_simulator)
         objective(args, strategy_setting, data, terms, strategy_simulator) # 選ばれた戦略スコアを表示するため
+        strategy_settings = strategy_simulator.strategy_settings[:args.use_optimized_init] + [strategy_setting]
         print(strategy_setting.__dict__)
     else:
-        _, strategy_setting = strategy.load_strategy_setting(args)
+        _, strategy_settings = strategy.load_strategy_setting(args)
         if args.output:
             print("Need -o parameter or Using --ignore_optimize. don't output simulate setting.")
             exit()
@@ -390,7 +391,7 @@ def walkforward(args, data, terms, strategy_simulator, combination_setting):
         end_date = utils.to_format_by_term(term["end_date"], args.tick)
         # 検証期間で結果を試す
         d = copy.deepcopy(data)
-        result = strategy_simulator.simulates(strategy_setting, d, start_date, end_date)
+        result = strategy_simulator.simulates(strategy_settings[-1], d, start_date, end_date)
 
         if args.apply_compound_interest: # 複利を適用
             strategy_simulator.simulator_setting.assets += result["gain"]
@@ -399,14 +400,15 @@ def walkforward(args, data, terms, strategy_simulator, combination_setting):
         performances[utils.to_format(utils.to_datetime_by_term(end_date, args.tick))] = result
 
     # 検証スコア
-    validate_score = -get_score(args, performances.values(), strategy_simulator.simulator_setting, strategy_setting)
+    validate_score = -get_score(args, performances.values(), strategy_simulator.simulator_setting, strategy_settings[-1])
     print(validate_score)
 
     # 結果の表示 =============================================================================
     report = create_performance(strategy_simulator.simulator_setting, performances)
 
     if args.output:
-        output_setting(args, strategy_setting, score, validate_score, strategy_simulator, report)
+        print("strategy_setting:", len(strategy_settings))
+        output_setting(args, strategy_settings, score, validate_score, strategy_simulator, report)
 
 
 ######################################################################
@@ -421,11 +423,14 @@ else:
 
 if args.optimize_count > 0 and not args.ignore_optimize and args.use_optimized_init == 0:
     combination_setting = strategy.create_combination_setting(args, use_json=False)
+    strategy_settings = []
 else:
     combination_setting = strategy.create_combination_setting(args)
+    _, strategy_settings = strategy.load_strategy_setting(args)
+
 combination_setting.montecarlo = args.montecarlo
 
-strategy_simulator = StrategySimulator(simulate_setting, combination_setting, verbose=args.verbose)
+strategy_simulator = StrategySimulator(simulate_setting, combination_setting, strategy_settings, verbose=args.verbose)
 
 # 翌期間用の設定を出力する
 # 都度読み込むと遅いので全部読み込んでおく
