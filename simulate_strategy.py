@@ -54,7 +54,6 @@ parser = strategy.add_options(parser)
 args = parser.parse_args()
 
 # start を1/1, endを12/31にしてしまうと前後のデータがないのでロードに失敗する
-
 def create_cache_name(args):
     prefix = strategy.get_prefix(args)
     params = [args.date, args.validate_term, args.count, args.optimize_count, args.tick]
