@@ -237,6 +237,7 @@ def select_data(codes, stocks):
     return select
 
 # 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
+@utils.stop_watch
 def simulate_by_multiple_term(strategy_setting, stocks, terms, strategy_simulator):
     tick = stocks["args"].tick
     params = []
