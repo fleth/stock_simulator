@@ -262,9 +262,10 @@ def simulate_by_multiple_term(stocks, params):
 
 # パラメータ評価用の関数
 # 指定戦略を全銘柄に対して最適化
-def objective(args, strategy_setting, stocks, params, strategy_simulator):
+def objective(args, strategy_setting, stocks, terms, strategy_simulator):
     print(strategy_setting.__dict__)
     try:
+        params = simulate_params(strategy_setting, stocks, terms, strategy_simulator)
         scores = simulate_by_multiple_term(stocks, params)
         score = get_score(args, scores, strategy_simulator.simulator_setting, strategy_setting)
     except Exception as e:
@@ -278,13 +279,12 @@ def strategy_optimize(args, stocks, terms, strategy_simulator):
     print("strategy_optimize: %s" % (utils.timestamp()))
     strategy_setting = strategy.StrategySetting()
 
-    params = simulate_params(strategy_setting, stocks, terms, strategy_simulator)
     # 現在の期間で最適な戦略を選択
     space = strategy_simulator.strategy_creator(args).ranges()
     n_random_starts = int(args.n_calls/10) if args.random > 0 else 10
     random_state = int(time.time()) if args.random > 0 else None
     res_gp = gp_minimize(
-        lambda x: objective(args, strategy_setting.by_array(x), stocks, params, strategy_simulator),
+        lambda x: objective(args, strategy_setting.by_array(x), stocks, terms, strategy_simulator),
         space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state)
     result = strategy_setting.by_array(res_gp.x)
     score = res_gp.fun
