@@ -235,7 +235,7 @@ def select_data(codes, stocks, start, end):
 
     return select
 
-def simulate_params(strategy_setting, stocks, terms, strategy_simulator):
+def simulate_params(stocks, terms, strategy_simulator):
     tick = stocks["args"].tick
     params = []
     strategy_simulator.simulator_setting.strategy = None
@@ -245,7 +245,7 @@ def simulate_params(strategy_setting, stocks, terms, strategy_simulator):
         end = utils.to_format_by_term(term["end_date"], tick)
         codes, _, _ = strategy_simulator.select_codes(stocks["args"], start, end)
         select = select_data(codes, stocks, start, end)
-        params.append((strategy_simulator, strategy_setting, select, start, end))
+        params.append((select, start, end))
     return params
 
 # 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
@@ -262,10 +262,10 @@ def simulate_by_multiple_term(stocks, params):
 
 # パラメータ評価用の関数
 # 指定戦略を全銘柄に対して最適化
-def objective(args, strategy_setting, stocks, terms, strategy_simulator):
+def objective(args, strategy_setting, stocks, params, strategy_simulator):
     print(strategy_setting.__dict__)
     try:
-        params = simulate_params(strategy_setting, stocks, terms, strategy_simulator)
+        params = list(map(lambda x: (strategy_simulator, strategy_setting) + x, params))
         scores = simulate_by_multiple_term(stocks, params)
         score = get_score(args, scores, strategy_simulator.simulator_setting, strategy_setting)
     except Exception as e:
@@ -275,7 +275,7 @@ def objective(args, strategy_setting, stocks, terms, strategy_simulator):
         score = 0
     return -score
 
-def strategy_optimize(args, stocks, terms, strategy_simulator):
+def strategy_optimize(args, stocks, params, strategy_simulator):
     print("strategy_optimize: %s" % (utils.timestamp()))
     strategy_setting = strategy.StrategySetting()
 
@@ -284,7 +284,7 @@ def strategy_optimize(args, stocks, terms, strategy_simulator):
     n_random_starts = int(args.n_calls/10) if args.random > 0 else 10
     random_state = int(time.time()) if args.random > 0 else None
     res_gp = gp_minimize(
-        lambda x: objective(args, strategy_setting.by_array(x), stocks, terms, strategy_simulator),
+        lambda x: objective(args, strategy_setting.by_array(x), stocks, params, strategy_simulator),
         space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state)
     result = strategy_setting.by_array(res_gp.x)
     score = res_gp.fun
@@ -365,7 +365,7 @@ def output_setting(args, strategy_settings, score, validate_score, strategy_simu
             "report": report,
         }))
 
-def walkforward(args, data, terms, strategy_simulator, combination_setting):
+def walkforward(args, stocks, terms, strategy_simulator, combination_setting):
     performances = {}
     # 最適化
     if args.optimize_count > 0 and not args.ignore_optimize:
@@ -374,9 +374,9 @@ def walkforward(args, data, terms, strategy_simulator, combination_setting):
         else:
             strategy_simulator.combination_setting.seed = combination_setting.seed[:args.use_optimized_init] + [time.time()]
 
-        d = copy.deepcopy(data)
-        strategy_setting, score = strategy_optimize(args, data, terms, strategy_simulator)
-        objective(args, strategy_setting, data, terms, strategy_simulator) # 選ばれた戦略スコアを表示するため
+        params = simulate_params(stocks, terms, strategy_simulator)
+        strategy_setting, score = strategy_optimize(args, stocks, params, strategy_simulator)
+        objective(args, strategy_setting, stocks, params, strategy_simulator) # 選ばれた戦略スコアを表示するため
         strategy_settings = strategy_simulator.strategy_settings[:args.use_optimized_init] + [strategy_setting]
         print(strategy_setting.__dict__)
     else:
@@ -391,7 +391,7 @@ def walkforward(args, data, terms, strategy_simulator, combination_setting):
         start_date = utils.to_format_by_term(term["start_date"], args.tick)
         end_date = utils.to_format_by_term(term["end_date"], args.tick)
         # 検証期間で結果を試す
-        d = copy.deepcopy(data)
+        d = copy.deepcopy(stocks)
         result = strategy_simulator.simulates(strategy_settings[-1], d, start_date, end_date)
 
         if args.apply_compound_interest: # 複利を適用
@@ -446,7 +446,7 @@ codes, validate_codes, daterange = strategy_simulator.select_codes(args, start, 
 
 print("target : %s" % codes)
 
-data = load(args, codes, terms, daterange, combination_setting)
+stocks = load(args, codes, terms, daterange, combination_setting)
 
 # 期間ごとに最適化
 terms = sorted(terms, key=lambda x: x["start_date"])
@@ -472,7 +472,7 @@ if args.random > 0:
         exit()
 
     for i in range(args.random):
-        walkforward(args, data, terms, strategy_simulator, combination_setting)
+        walkforward(args, stocks, terms, strategy_simulator, combination_setting)
 
         params = ["cp", "simulate_settings/%s" % (filename), "simulate_settings/tmp/%s_%s" % (i, filename)]
         subprocess.call(params)
@@ -480,7 +480,7 @@ if args.random > 0:
     params = ["sh", "simulator/copy_highest_score_setting.sh", strategy.get_prefix(args)]
     subprocess.call(params)
 else:
-    walkforward(args, data, terms, strategy_simulator, combination_setting)
+    walkforward(args, stocks, terms, strategy_simulator, combination_setting)
 
 print(utils.timestamp())
 proc_end_time = time.time()
