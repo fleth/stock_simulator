@@ -46,10 +46,10 @@ parser.add_argument("-j", "--jobs", type=int, action="store", default=8, dest="j
 parser.add_argument("-v", action="store_true", default=False, dest="verbose", help="debug log")
 parser.add_argument("--output", action="store_true", default=False, dest="output", help="設定をファイルに出力")
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
-parser.add_argument("--auto_stop_loss", action="store_true", default=False, dest="auto_stop_loss", help="自動損切")
 parser.add_argument("--apply_compound_interest", action="store_true", default=False, dest="apply_compound_interest", help="複利を適用")
 parser.add_argument("--use_optimized_init", type=int, action="store", default=0, dest="use_optimized_init", help="どこまで初期値に最適化後の設定を使うか")
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
+parser.add_argument("--skip_optimized", action="store_true", default=False, dest="skip_optimized", help="最適化済みなら最適化をスキップ")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
 
@@ -66,7 +66,6 @@ def create_setting(args, assets):
     setting.assets = assets
     setting.commission = 150
     setting.debug = args.verbose
-    setting.auto_stop_loss = args.auto_stop_loss
     return setting
 
 def create_simulator_data(param):
@@ -228,16 +227,15 @@ def simulate_by_term(param):
     strategy_simulator = param[0]
     return strategy_simulator.simulates(*param[1:])
 
-def select_data(codes, stocks):
+def select_data(codes, stocks, start, end):
     select = {"data": {}, "index": stocks["index"], "args": stocks["args"]}
 
     for code in codes:
-        select["data"][code] = stocks["data"][code]
+        select["data"][code] = stocks["data"][code].split(start, end)
 
     return select
 
-# 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
-def simulate_by_multiple_term(strategy_setting, stocks, terms, strategy_simulator):
+def simulate_params(strategy_setting, stocks, terms, strategy_simulator):
     tick = stocks["args"].tick
     params = []
     strategy_simulator.simulator_setting.strategy = None
@@ -246,9 +244,12 @@ def simulate_by_multiple_term(strategy_setting, stocks, terms, strategy_simulato
         start = utils.to_format_by_term(term["start_date"], tick)
         end = utils.to_format_by_term(term["end_date"], tick)
         codes, _, _ = strategy_simulator.select_codes(stocks["args"], start, end)
-        select = select_data(codes, stocks)
+        select = select_data(codes, stocks, start, end)
         params.append((strategy_simulator, strategy_setting, select, start, end))
+    return params
 
+# 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
+def simulate_by_multiple_term(stocks, params):
     try:
         p = Pool(int(stocks["args"].jobs))
         scores = p.map(simulate_by_term, params)
@@ -261,10 +262,10 @@ def simulate_by_multiple_term(strategy_setting, stocks, terms, strategy_simulato
 
 # パラメータ評価用の関数
 # 指定戦略を全銘柄に対して最適化
-def objective(args, strategy_setting, stocks, terms, strategy_simulator):
+def objective(args, strategy_setting, stocks, params, strategy_simulator):
     print(strategy_setting.__dict__)
     try:
-        scores = simulate_by_multiple_term(strategy_setting, stocks, terms, strategy_simulator)
+        scores = simulate_by_multiple_term(stocks, params)
         score = get_score(args, scores, strategy_simulator.simulator_setting, strategy_setting)
     except Exception as e:
         print("skip objective. %s" % e)
@@ -277,12 +278,13 @@ def strategy_optimize(args, stocks, terms, strategy_simulator):
     print("strategy_optimize: %s" % (utils.timestamp()))
     strategy_setting = strategy.StrategySetting()
 
+    params = simulate_params(strategy_setting, stocks, terms, strategy_simulator)
     # 現在の期間で最適な戦略を選択
     space = strategy_simulator.strategy_creator(args).ranges()
     n_random_starts = int(args.n_calls/10) if args.random > 0 else 10
     random_state = int(time.time()) if args.random > 0 else None
     res_gp = gp_minimize(
-        lambda x: objective(args, strategy_setting.by_array(x), stocks, terms, strategy_simulator),
+        lambda x: objective(args, strategy_setting.by_array(x), stocks, params, strategy_simulator),
         space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state)
     result = strategy_setting.by_array(res_gp.x)
     score = res_gp.fun
@@ -463,7 +465,11 @@ if args.random > 0:
 
     filename = strategy.get_filename(args)
     params = ["cp", "simulate_settings/%s" % (filename), "simulate_settings/tmp/default_%s" % filename]
-    subprocess.call(params)
+    status = subprocess.call(params)
+
+    if status == 0 and args.skip_optimized:
+        print("skip. optimized.")
+        exit()
 
     for i in range(args.random):
         walkforward(args, data, terms, strategy_simulator, combination_setting)
