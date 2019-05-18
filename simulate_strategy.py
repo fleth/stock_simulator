@@ -37,19 +37,20 @@ from strategy_simulator import StrategySimulator
 parser = ArgumentParser()
 parser.add_argument("date", type=str)
 parser.add_argument("validate_term", type=int) # 最適化期間の10~20%
-parser.add_argument("--ignore_optimize", action="store_true", default=False, dest="ignore_optimize", help="最適化を実施しない")
 parser.add_argument("-o", type=int, action="store", default=0, dest="optimize_count", help="最適化期間の数")
 parser.add_argument("-c", type=int, action="store", default=1, dest="count", help="検証期間の数")
-parser.add_argument("--assets", type=int, action="store", default=None, dest="assets", help="assets")
 parser.add_argument("-n", "--n_calls", type=int, action="store", default=100, help="simulate n_calls")
 parser.add_argument("-j", "--jobs", type=int, action="store", default=8, dest="jobs", help="実行ジョブ数")
 parser.add_argument("-v", action="store_true", default=False, dest="verbose", help="debug log")
+parser.add_argument("--assets", type=int, action="store", default=None, dest="assets", help="assets")
 parser.add_argument("--output", action="store_true", default=False, dest="output", help="設定をファイルに出力")
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
-parser.add_argument("--apply_compound_interest", action="store_true", default=False, dest="apply_compound_interest", help="複利を適用")
-parser.add_argument("--use_optimized_init", type=int, action="store", default=0, dest="use_optimized_init", help="どこまで初期値に最適化後の設定を使うか")
-parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser.add_argument("--skip_optimized", action="store_true", default=False, dest="skip_optimized", help="最適化済みなら最適化をスキップ")
+parser.add_argument("--ignore_optimize", action="store_true", default=False, dest="ignore_optimize", help="最適化を実施しない")
+parser.add_argument("--use_optimized_init", type=int, action="store", default=0, dest="use_optimized_init", help="どこまで初期値に最適化後の設定を使うか")
+parser.add_argument("--apply_compound_interest", action="store_true", default=False, dest="apply_compound_interest", help="複利を適用")
+parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
+parser.add_argument("--use_cache", action="store_true", default=False, dest="use_cache", help="キャッシュを使う")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
 
@@ -79,7 +80,7 @@ def create_simulator_data(param):
 
     cacher = cache.Cache("/tmp/simulator")
     name = "_".join([create_cache_name(args), str(code), start_date, end_date])
-    if cacher.exists(name):
+    if cacher.exists(name) and args.use_cache:
         data = cacher.get(name)
         print("cache loaded:", code, start_date, end_date)
     else:
