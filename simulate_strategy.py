@@ -314,9 +314,10 @@ def create_terms(args):
     print(list(map(lambda x: "%s - %s" % (str(x["start_date"]), str(x["end_date"])), validate_terms)))
     return terms, validate_terms
 
-def create_performance(simulator_setting, performances):
+def create_performance(args, simulator_setting, performances):
     # レポート出力
-    with open("settings/performance.json", "w") as f:
+    filename = "settings/performance.json" if args.code is None else "simulate_settings/%s_performance.json" % args.code
+    with open(filename, "w") as f:
         f.write(json.dumps(performances))
 
     # 簡易レポート
@@ -406,7 +407,7 @@ def walkforward(args, stocks, terms, strategy_simulator, combination_setting):
     print(validate_score)
 
     # 結果の表示 =============================================================================
-    report = create_performance(strategy_simulator.simulator_setting, performances)
+    report = create_performance(args, strategy_simulator.simulator_setting, performances)
 
     if args.output:
         print("strategy_setting:", len(strategy_settings))
