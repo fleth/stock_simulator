@@ -51,6 +51,7 @@ parser.add_argument("--use_optimized_init", type=int, action="store", default=0,
 parser.add_argument("--apply_compound_interest", action="store_true", default=False, dest="apply_compound_interest", help="複利を適用")
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser.add_argument("--use_cache", action="store_true", default=False, dest="use_cache", help="キャッシュを使う")
+parser.add_argument("--performance", action="store_true", default=False, dest="performance", help="パフォーマンスレポートを出力する")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
 
@@ -316,9 +317,10 @@ def create_terms(args):
 
 def create_performance(args, simulator_setting, performances):
     # レポート出力
-    filename = "settings/performance.json" if args.code is None else "simulate_settings/%s_performance.json" % args.code
-    with open(filename, "w") as f:
-        f.write(json.dumps(performances))
+    if args.performance:
+        filename = "settings/performance.json" if args.code is None else "simulate_settings/%s_performance.json" % args.code
+        with open(filename, "w") as f:
+            f.write(json.dumps(performances))
 
     # 簡易レポート
     for k, v in sorted(performances.items(), key=lambda x: utils.to_datetime(x[0])):
