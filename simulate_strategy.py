@@ -364,6 +364,7 @@ def output_setting(args, strategy_settings, score, validate_score, strategy_simu
             "position_sizing": strategy_simulator.combination_setting.position_sizing,
             "stop_loss_rate": strategy_simulator.simulator_setting.stop_loss_rate,
             "taking_rate": strategy_simulator.simulator_setting.taking_rate,
+            "min_unit": strategy_simulator.simulator_setting.min_unit,
             "setting": list(map(lambda x: x.__dict__, strategy_settings)),
             "seed": strategy_simulator.combination_setting.seed,
             "report": report,
