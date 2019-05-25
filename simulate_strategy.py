@@ -390,13 +390,12 @@ def walkforward(args, stocks, terms, strategy_simulator, combination_setting):
             exit()
 
     # 検証
+    strategy_simulator.strategy_settings = strategy_settings
     terms = sorted(validate_terms, key=lambda x: x["start_date"])
-    for term in terms:
-        start_date = utils.to_format_by_term(term["start_date"], args.tick)
-        end_date = utils.to_format_by_term(term["end_date"], args.tick)
-        # 検証期間で結果を試す
-        d = copy.deepcopy(stocks)
-        result = strategy_simulator.simulates(strategy_settings[-1], d, start_date, end_date)
+    params = simulate_params(stocks, terms, strategy_simulator)
+    for param in params:
+        _, start_date, end_date = param
+        result = simulate_by_term((strategy_simulator, strategy_settings[-1]) + param)
 
         if args.apply_compound_interest: # 複利を適用
             strategy_simulator.simulator_setting.assets += result["gain"]
