@@ -18,7 +18,7 @@ import cache
 import utils
 import slack
 import strategy
-from loader import Loader
+from loader import Loader, Bitcoin
 from simulator import Simulator, SimulatorSetting, SimulatorData
 from strategy_simulator import StrategySimulator
 
@@ -303,17 +303,23 @@ def create_terms(args):
         start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count, args.tick)
         term = {"start_date": start_date, "end_date": end_date}
         validate_term = {"start_date": end_date, "end_date": valid_end_date}
-        if args.tick:
-            term["start_date"] += datetime.timedelta(hours=9)
-            term["end_date"] += datetime.timedelta(hours=15)
-            validate_term["start_date"] += datetime.timedelta(days=1, hours=9)
-            validate_term["end_date"] += datetime.timedelta(hours=15)
+        term, validate_term = term_filter(args, term, validate_term)
         terms.append(term)
         validate_terms.append(validate_term)
         valid_end_date = start_date
     print(list(map(lambda x: "%s - %s" % (str(x["start_date"]), str(x["end_date"])), terms)))
     print(list(map(lambda x: "%s - %s" % (str(x["start_date"]), str(x["end_date"])), validate_terms)))
     return terms, validate_terms
+
+def term_filter(args, term, validate_term):
+    if not args.tick or args.code in Bitcoin().exchanges:
+        return term, validate_term
+
+    term["start_date"] += datetime.timedelta(hours=9)
+    term["end_date"] += datetime.timedelta(hours=15)
+    validate_term["start_date"] += datetime.timedelta(days=1, hours=9)
+    validate_term["end_date"] += datetime.timedelta(hours=15)
+    return term, validate_term
 
 def create_performance(args, simulator_setting, performances):
     # レポート出力
@@ -443,8 +449,6 @@ terms, validate_terms = create_terms(args)
 min_start_date = min(list(map(lambda x: x["start_date"], terms)))
 start = utils.to_format_by_term(min_start_date, args.tick)
 end = utils.to_datetime(args.date)
-if args.tick:
-    end = end + datetime.timedelta(hours=9)
 end = utils.to_format_by_term(end, args.tick)
 codes, validate_codes, daterange = strategy_simulator.select_codes(args, start, end)
 
