@@ -233,6 +233,8 @@ def select_data(codes, stocks, start, end):
     select = {"data": {}, "index": stocks["index"], "args": stocks["args"]}
 
     for code in codes:
+        if not code in stocks["data"].keys():
+            continue
         select["data"][code] = stocks["data"][code].split(start, end)
 
     return select
