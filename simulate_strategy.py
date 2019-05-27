@@ -232,10 +232,13 @@ def simulate_by_term(param):
 def select_data(codes, stocks, start, end):
     select = {"data": {}, "index": stocks["index"], "args": stocks["args"]}
 
+    args = select["args"]
+
     for code in codes:
         if not code in stocks["data"].keys():
             continue
-        select["data"][code] = stocks["data"][code].split(start, end)
+        start_date = utils.to_format(utils.to_datetime_by_term(start,args.tick) - utils.relativeterm(1, args.tick))
+        select["data"][code] = stocks["data"][code].split(start_date, end)
 
     return select
 
