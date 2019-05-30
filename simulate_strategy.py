@@ -166,14 +166,14 @@ def get_score_stats(scores):
 
 def print_score_stats(name, score, score_stats, assets, strategy_setting):
     stats = [
-        "max_dd", round(max(score_stats["max_drawdown"]), 2),
-        "min:", round(min(score_stats["gain"]) / assets, 2),
-        "max:", round(max(score_stats["gain"]) / assets, 2),
+        "max_dd", "{:.2f}".format(max(score_stats["max_drawdown"])),
+        "min:", "{:.2f}".format(min(score_stats["gain"]) / assets),
+        "max:", "{:.2f}".format(max(score_stats["gain"]) / assets),
         "sum:", sum(score_stats["gain"]),
         "win:", sum(score_stats["win"]),
         "lose:", sum(score_stats["lose"]),
-        "pf:", round(score_stats["profit_factor"], 2),
-        "gpt:", round(score_stats["gain_per_trade"], 2),
+        "pf:", "{:.2f}".format(score_stats["profit_factor"]),
+        "gpt:", "{:.2f}".format(score_stats["gain_per_trade"]),
         "t:", sum(score_stats["trade"]),
         "wt:", sum(score_stats["win_trade"])]
 
@@ -269,12 +269,17 @@ def simulate_by_multiple_term(stocks, params):
 
 # パラメータ評価用の関数
 # 指定戦略を全銘柄に対して最適化
-def objective(args, strategy_setting, stocks, params, strategy_simulator):
+def objective(args, strategy_setting, stocks, params, validate_params, strategy_simulator):
     print(strategy_setting.__dict__)
     try:
         params = list(map(lambda x: (strategy_simulator, strategy_setting) + x, params))
         scores = simulate_by_multiple_term(stocks, params)
         score = get_score(args, scores, strategy_simulator.simulator_setting, strategy_setting)
+        if score > 0:
+            validate_params = list(map(lambda x: (strategy_simulator, strategy_setting) + x, validate_params))
+            validate_scores = simulate_by_multiple_term(stocks, validate_params)
+            validate_score = get_score(args, validate_scores, strategy_simulator.simulator_setting, strategy_setting)
+            score = score * validate_score
     except Exception as e:
         print("skip objective. %s" % e)
         import traceback
@@ -282,7 +287,7 @@ def objective(args, strategy_setting, stocks, params, strategy_simulator):
         score = 0
     return -score
 
-def strategy_optimize(args, stocks, params, strategy_simulator):
+def strategy_optimize(args, stocks, params, validate_params, strategy_simulator):
     print("strategy_optimize: %s" % (utils.timestamp()))
     strategy_setting = strategy.StrategySetting()
 
@@ -291,7 +296,7 @@ def strategy_optimize(args, stocks, params, strategy_simulator):
     n_random_starts = int(args.n_calls/10) if args.random > 0 else 10
     random_state = int(time.time()) if args.random > 0 else None
     res_gp = gp_minimize(
-        lambda x: objective(args, strategy_setting.by_array(x), stocks, params, strategy_simulator),
+        lambda x: objective(args, strategy_setting.by_array(x), stocks, params, validate_params, strategy_simulator),
         space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state)
     result = strategy_setting.by_array(res_gp.x)
     score = res_gp.fun
@@ -366,7 +371,7 @@ def output_setting(args, strategy_settings, score, validate_score, strategy_simu
         f.write(json.dumps({
             "date": args.date,
             "term": args.validate_term,
-            "score": int(score) * int(validate_score) * -1,
+            "score": int(score),
             "optimize_score": int(score),
             "validate_score": int(validate_score),
             "monitor_size": monitor_size,
@@ -381,7 +386,7 @@ def output_setting(args, strategy_settings, score, validate_score, strategy_simu
             "report": report,
         }))
 
-def walkforward(args, stocks, terms, strategy_simulator, combination_setting):
+def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting):
     performances = {}
     # 最適化
     if args.optimize_count > 0 and not args.ignore_optimize:
@@ -391,8 +396,9 @@ def walkforward(args, stocks, terms, strategy_simulator, combination_setting):
             strategy_simulator.combination_setting.seed = combination_setting.seed[:args.use_optimized_init] + [time.time()]
 
         params = simulate_params(stocks, terms, strategy_simulator)
-        strategy_setting, score = strategy_optimize(args, stocks, params, strategy_simulator)
-        objective(args, strategy_setting, stocks, params, strategy_simulator) # 選ばれた戦略スコアを表示するため
+        validate_params = simulate_params(stocks, validate_terms, strategy_simulator)
+        strategy_setting, score = strategy_optimize(args, stocks, params, validate_params, strategy_simulator)
+        objective(args, strategy_setting, stocks, params, validate_params, strategy_simulator) # 選ばれた戦略スコアを表示するため
         strategy_settings = strategy_simulator.strategy_settings[:args.use_optimized_init] + [strategy_setting]
         print(strategy_setting.__dict__)
     else:
@@ -485,7 +491,7 @@ if args.random > 0:
         exit()
 
     for i in range(args.random):
-        walkforward(args, stocks, terms, strategy_simulator, combination_setting)
+        walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting)
 
         params = ["cp", "simulate_settings/%s" % (filename), "simulate_settings/tmp/%s_%s" % (i, filename)]
         subprocess.call(params)
@@ -493,7 +499,7 @@ if args.random > 0:
     params = ["sh", "simulator/copy_highest_score_setting.sh", strategy.get_prefix(args)]
     subprocess.call(params)
 else:
-    walkforward(args, stocks, terms, strategy_simulator, combination_setting)
+    walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting)
 
 print(utils.timestamp())
 proc_end_time = time.time()
