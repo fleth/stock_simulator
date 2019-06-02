@@ -325,9 +325,11 @@ def term_filter(args, term, validate_term):
     if not args.tick or args.code in Bitcoin().exchanges:
         return term, validate_term
 
+    term["start_date"] += datetime.timedelta(days=1)
     term["start_date"] += datetime.timedelta(hours=9)
     term["end_date"] += datetime.timedelta(hours=15)
-    validate_term["start_date"] += datetime.timedelta(days=1, hours=9)
+    validate_term["start_date"] += datetime.timedelta(days=1)
+    validate_term["start_date"] += datetime.timedelta(hours=9)
     validate_term["end_date"] += datetime.timedelta(hours=15)
     return term, validate_term
 
@@ -423,10 +425,10 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
 
     # 検証スコア
     validate_score = -get_score(args, performances.values(), strategy_simulator.simulator_setting, strategy_settings[-1])
-    print(validate_score)
 
     # 結果の表示 =============================================================================
     report = create_performance(args, strategy_simulator.simulator_setting, performances)
+    print(validate_score)
 
     if args.output:
         print("strategy_setting:", len(strategy_settings))
