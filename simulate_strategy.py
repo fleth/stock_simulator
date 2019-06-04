@@ -462,10 +462,12 @@ terms, validate_terms = create_terms(args)
 min_start_date = min(list(map(lambda x: x["start_date"], terms)))
 start = utils.to_format_by_term(min_start_date, args.tick)
 end = utils.to_datetime(args.date)
+if args.tick:
+    end += datetime.timedelta(hours=15)
 end = utils.to_format_by_term(end, args.tick)
 codes, validate_codes, daterange = strategy_simulator.select_codes(args, start, end)
 
-print("target : %s" % codes)
+print("target : %s" % codes, start, end)
 
 stocks = load(args, codes, terms, daterange, combination_setting)
 
