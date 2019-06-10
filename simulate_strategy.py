@@ -43,6 +43,7 @@ parser.add_argument("-n", "--n_calls", type=int, action="store", default=100, he
 parser.add_argument("-j", "--jobs", type=int, action="store", default=8, dest="jobs", help="実行ジョブ数")
 parser.add_argument("-v", action="store_true", default=False, dest="verbose", help="debug log")
 parser.add_argument("--assets", type=int, action="store", default=None, dest="assets", help="assets")
+parser.add_argument("--commission", type=int, action="store", default=150, dest="commission", help="commission")
 parser.add_argument("--output", action="store_true", default=False, dest="output", help="設定をファイルに出力")
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
 parser.add_argument("--skip_optimized", action="store_true", default=False, dest="skip_optimized", help="最適化済みなら最適化をスキップ")
@@ -66,7 +67,7 @@ def create_setting(args, assets):
     setting = strategy.create_simulator_setting(args)
     setting.min_data_length = args.validate_term * 10
     setting.assets = assets
-    setting.commission = 150
+    setting.commission = args.commission
     setting.debug = args.verbose
     return setting
 
@@ -252,6 +253,7 @@ def simulate_params(stocks, terms, strategy_simulator):
         end = utils.to_format_by_term(term["end_date"], tick)
         codes, _, _ = strategy_simulator.select_codes(stocks["args"], start, end)
         select = select_data(codes, stocks, start, end)
+
         params.append((select, start, end))
     return params
 
