@@ -239,6 +239,7 @@ def select_data(codes, stocks, start, end):
         if not code in stocks["data"].keys():
             continue
         start_date = utils.to_format(utils.to_datetime_by_term(start,args.tick) - utils.relativeterm(1, args.tick))
+        print(start_date, end)
         select["data"][code] = stocks["data"][code].split(start_date, end)
 
     return select
@@ -324,7 +325,14 @@ def create_terms(args):
     return terms, validate_terms
 
 def term_filter(args, term, validate_term):
-    if not args.tick or args.code in Bitcoin().exchanges:
+    if not args.tick:
+        return term, validate_term
+
+    if args.code in Bitcoin().exchanges:
+        term["start_date"] += datetime.timedelta(days=1)
+        term["end_date"] += datetime.timedelta(days=1)
+        validate_term["start_date"] += datetime.timedelta(days=1)
+        validate_term["end_date"] += datetime.timedelta(days=1)
         return term, validate_term
 
     term["start_date"] += datetime.timedelta(days=1)
