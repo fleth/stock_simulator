@@ -59,7 +59,7 @@ args = parser.parse_args()
 # start を1/1, endを12/31にしてしまうと前後のデータがないのでロードに失敗する
 def create_cache_name(args):
     prefix = strategy.get_prefix(args)
-    params = [args.date, args.validate_term, args.count, args.optimize_count, args.tick]
+    params = [args.date, args.validate_term, args.count, args.optimize_count, args.daytrade]
     params = list(map(lambda x: str(x), params))
     return "%s%s" % (prefix, "_".join(params))
 
@@ -94,7 +94,7 @@ def create_simulator_data(param):
 def load_index(args, start_date, end_date):
     index = {}
 
-    if args.tick:
+    if args.daytrade:
         return index # 指標はティックデータない
 
     for k in ["nikkei"]:
@@ -107,7 +107,7 @@ def load_index(args, start_date, end_date):
 
 def load(args, codes, terms, daterange, combination_setting):
     min_start_date = min(list(map(lambda x: x["start_date"], terms)))
-    prepare_term = utils.relativeterm(args.validate_term, args.tick)
+    prepare_term = utils.relativeterm(args.validate_term, args.daytrade)
     start_date = utils.to_format(min_start_date - prepare_term)
     end_date = utils.format(args.date)
     strategy_creator = strategy.load_strategy_creator(args, combination_setting)
@@ -136,8 +136,8 @@ def load(args, codes, terms, daterange, combination_setting):
     return {"data": data, "index": index, "args": args}
 
 def get_score(args, scores, simulator_setting, strategy_setting):
-    if args.tick:
-        score = get_tick_score(scores, simulator_setting, strategy_setting)
+    if args.daytrade:
+        score = get_daytrade_score(scores, simulator_setting, strategy_setting)
     else:
         score = get_default_score(scores, simulator_setting, strategy_setting)
     return score
@@ -205,7 +205,7 @@ def get_default_score(scores, simulator_setting, strategy_setting):
 
     return score
 
-def get_tick_score(scores, simulator_setting, strategy_setting):
+def get_daytrade_score(scores, simulator_setting, strategy_setting):
     score_stats = get_score_stats(scores)
 
     ignore = [
@@ -222,7 +222,7 @@ def get_tick_score(scores, simulator_setting, strategy_setting):
     if any(ignore):
         score = 0
 
-    print_score_stats("tick:", score, score_stats, simulator_setting.assets, strategy_setting)
+    print_score_stats("daytrade:", score, score_stats, simulator_setting.assets, strategy_setting)
 
     return score
 
@@ -238,20 +238,20 @@ def select_data(codes, stocks, start, end):
     for code in codes:
         if not code in stocks["data"].keys():
             continue
-        start_date = utils.to_format(utils.to_datetime_by_term(start,args.tick) - utils.relativeterm(1, args.tick))
+        start_date = utils.to_format(utils.to_datetime_by_term(start,args.daytrade) - utils.relativeterm(1, args.daytrade))
         print(start_date, end)
         select["data"][code] = stocks["data"][code].split(start_date, end)
 
     return select
 
 def simulate_params(stocks, terms, strategy_simulator):
-    tick = stocks["args"].tick
+    daytrade = stocks["args"].daytrade
     params = []
     strategy_simulator.simulator_setting.strategy = None
     for term in terms:
         # term毎にデータを分けてシミュレートした結果の平均をスコアとして返す
-        start = utils.to_format_by_term(term["start_date"], tick)
-        end = utils.to_format_by_term(term["end_date"], tick)
+        start = utils.to_format_by_term(term["start_date"], daytrade)
+        end = utils.to_format_by_term(term["end_date"], daytrade)
         codes, _, _ = strategy_simulator.select_codes(stocks["args"], start, end)
         select = select_data(codes, stocks, start, end)
 
@@ -312,8 +312,8 @@ def create_terms(args):
 
     valid_end_date = utils.to_datetime(args.date)
     for c in range(args.count):
-        end_date = valid_end_date - utils.relativeterm(args.validate_term, args.tick)
-        start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count, args.tick)
+        end_date = valid_end_date - utils.relativeterm(args.validate_term, args.daytrade)
+        start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count, args.daytrade)
         term = {"start_date": start_date, "end_date": end_date}
         validate_term = {"start_date": end_date, "end_date": valid_end_date}
         term, validate_term = term_filter(args, term, validate_term)
@@ -325,7 +325,7 @@ def create_terms(args):
     return terms, validate_terms
 
 def term_filter(args, term, validate_term):
-    if not args.tick:
+    if not args.daytrade:
         return term, validate_term
 
     if args.code in Bitcoin().exchanges:
@@ -431,7 +431,7 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
             strategy_simulator.simulator_setting.assets += result["gain"]
             print("assets:", strategy_simulator.simulator_setting.assets, result["gain"])
 
-        performances[utils.to_format(utils.to_datetime_by_term(end_date, args.tick))] = result
+        performances[utils.to_format(utils.to_datetime_by_term(end_date, args.daytrade))] = result
 
     # 検証スコア
     validate_score = -get_score(args, performances.values(), strategy_simulator.simulator_setting, strategy_settings[-1])
@@ -470,11 +470,11 @@ strategy_simulator = StrategySimulator(simulate_setting, combination_setting, st
 # 都度読み込むと遅いので全部読み込んでおく
 terms, validate_terms = create_terms(args)
 min_start_date = min(list(map(lambda x: x["start_date"], terms)))
-start = utils.to_format_by_term(min_start_date, args.tick)
+start = utils.to_format_by_term(min_start_date, args.daytrade)
 end = utils.to_datetime(args.date)
-if args.tick:
+if args.daytrade:
     end += datetime.timedelta(hours=15)
-end = utils.to_format_by_term(end, args.tick)
+end = utils.to_format_by_term(end, args.daytrade)
 codes, validate_codes, daterange = strategy_simulator.select_codes(args, start, end)
 
 print("target : %s" % codes, start, end)
