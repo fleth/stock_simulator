@@ -236,7 +236,6 @@ def select_data(codes, stocks, start, end):
         if not code in stocks["data"].keys():
             continue
         start_date = utils.to_format(utils.to_datetime_by_term(start,args.daytrade) - utils.relativeterm(1, args.daytrade))
-        print(start_date, end)
         select["data"][code] = stocks["data"][code].split(start_date, end)
 
     return select
