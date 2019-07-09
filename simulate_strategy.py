@@ -77,16 +77,13 @@ def create_simulator_data(param):
     end_date = param["end_date"]
     args = param["args"]
 
-    settings = strategy.LoadSettings()
-    settings.with_stats = False # startegy_simlator側で各足毎に統計値を出力するのでここでは計算しない
-
     cacher = cache.Cache("/tmp/simulator")
     name = "_".join([create_cache_name(args), str(code), start_date, end_date])
     if cacher.exists(name) and args.use_cache:
         data = cacher.get(name)
         print("cache loaded:", code, start_date, end_date)
     else:
-        data = strategy.load_simulator_data(code, start_date, end_date, args, settings)
+        data = strategy.load_simulator_data(code, start_date, end_date, args)
         cacher.create(name, data)
 
     return data
