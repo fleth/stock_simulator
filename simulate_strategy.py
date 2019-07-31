@@ -392,6 +392,7 @@ def output_setting(args, strategy_settings, score, validate_score, strategy_simu
             "setting": list(map(lambda x: x.__dict__, strategy_settings)),
             "seed": strategy_simulator.combination_setting.seed,
             "report": report,
+            "use_limit": args.use_limit
         }))
 
 def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting):
