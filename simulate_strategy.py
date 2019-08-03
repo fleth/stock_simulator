@@ -318,6 +318,10 @@ def create_terms(args):
         valid_end_date = start_date
     print(list(map(lambda x: "%s - %s" % (str(x["start_date"]), str(x["end_date"])), terms)))
     print(list(map(lambda x: "%s - %s" % (str(x["start_date"]), str(x["end_date"])), validate_terms)))
+
+    terms = sorted(terms, key=lambda x: x["start_date"])
+    validate_terms = sorted(validate_terms, key=lambda x: x["start_date"])
+
     return terms, validate_terms
 
 def term_filter(args, term, validate_term):
@@ -368,9 +372,9 @@ def create_performance(args, simulator_setting, performances):
 
     return result
 
-def output_setting(args, strategy_settings, score, validate_score, strategy_simulator, report):
+def output_setting(args, strategy_settings, strategy_simulator, score, optimize_score, validate_score, optimize_report, validate_report):
     monitor_size = strategy_simulator.combination_setting.monitor_size
-    monitor_size_ratio = (monitor_size / report["average_trade_size"]) if report["average_trade_size"] > 0 else 1
+    monitor_size_ratio = (monitor_size / validate_report["average_trade_size"]) if validate_report["average_trade_size"] > 0 else 1
     filename = "simulate_settings/%s" % strategy.get_filename(args)
     output_dir = os.path.dirname(filename)
     if not os.path.exists(output_dir):
@@ -380,7 +384,7 @@ def output_setting(args, strategy_settings, score, validate_score, strategy_simu
             "date": args.date,
             "term": args.validate_term,
             "score": int(score),
-            "optimize_score": int(score),
+            "optimize_score": int(optimize_score),
             "validate_score": int(validate_score),
             "monitor_size": monitor_size,
             "monitor_size_ratio": monitor_size_ratio,
@@ -391,12 +395,34 @@ def output_setting(args, strategy_settings, score, validate_score, strategy_simu
             "min_unit": strategy_simulator.simulator_setting.min_unit,
             "setting": list(map(lambda x: x.__dict__, strategy_settings)),
             "seed": strategy_simulator.combination_setting.seed,
-            "report": report,
+            "optimize_report": optimize_report,
+            "validate_report": validate_report,
             "use_limit": args.use_limit
         }))
 
-def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting):
+def validation(args, stocks, terms, strategy_simulator, combination_setting, strategy_settings):
     performances = {}
+    strategy_simulator.strategy_settings = strategy_settings
+    params = simulate_params(stocks, terms, strategy_simulator)
+    for param in params:
+        _, start_date, end_date = param
+        result = simulate_by_term((strategy_simulator, strategy_settings[-1]) + param)
+
+        if args.apply_compound_interest: # 複利を適用
+            strategy_simulator.simulator_setting.assets += result["gain"]
+            print("assets:", strategy_simulator.simulator_setting.assets, result["gain"])
+
+        performances[utils.to_format(utils.to_datetime_by_term(end_date, args.daytrade))] = result
+
+    # 検証スコア
+    score = -get_score(args, performances.values(), strategy_simulator.simulator_setting, strategy_settings[-1])
+
+    # 結果の表示 =============================================================================
+    report = create_performance(args, strategy_simulator.simulator_setting, performances)
+
+    return score, report
+
+def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting):
     # 最適化
     if args.optimize_count > 0 and not args.ignore_optimize:
         if args.use_optimized_init == 0:
@@ -417,29 +443,13 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
             exit()
 
     # 検証
-    strategy_simulator.strategy_settings = strategy_settings
-    terms = sorted(validate_terms, key=lambda x: x["start_date"])
-    params = simulate_params(stocks, terms, strategy_simulator)
-    for param in params:
-        _, start_date, end_date = param
-        result = simulate_by_term((strategy_simulator, strategy_settings[-1]) + param)
-
-        if args.apply_compound_interest: # 複利を適用
-            strategy_simulator.simulator_setting.assets += result["gain"]
-            print("assets:", strategy_simulator.simulator_setting.assets, result["gain"])
-
-        performances[utils.to_format(utils.to_datetime_by_term(end_date, args.daytrade))] = result
-
-    # 検証スコア
-    validate_score = -get_score(args, performances.values(), strategy_simulator.simulator_setting, strategy_settings[-1])
-
-    # 結果の表示 =============================================================================
-    report = create_performance(args, strategy_simulator.simulator_setting, performances)
+    optimize_score, optimize_report = validation(args, stocks, terms, strategy_simulator, combination_setting, strategy_settings)
+    validate_score, validate_report = validation(args, stocks, validate_terms, strategy_simulator, combination_setting, strategy_settings)
     print(validate_score)
 
     if args.output:
         print("strategy_setting:", len(strategy_settings))
-        output_setting(args, strategy_settings, score, validate_score, strategy_simulator, report)
+        output_setting(args, strategy_settings, strategy_simulator, score, optimize_score, validate_score, optimize_report, validate_report)
 
 
 ######################################################################
