@@ -403,6 +403,7 @@ def output_setting(args, strategy_settings, strategy_simulator, score, optimize_
 def validation(args, stocks, terms, strategy_simulator, combination_setting, strategy_settings):
     performances = {}
     strategy_simulator.strategy_settings = strategy_settings
+    strategy_simulator.combination_setting = combination_setting
     params = simulate_params(stocks, terms, strategy_simulator)
     for param in params:
         _, start_date, end_date = param
@@ -425,6 +426,8 @@ def validation(args, stocks, terms, strategy_simulator, combination_setting, str
 def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting):
     # 最適化
     if args.optimize_count > 0 and not args.ignore_optimize:
+        strategy_simulator.combination_setting = combination_setting
+
         if args.use_optimized_init == 0:
             strategy_simulator.combination_setting.seed = [time.time()]
         else:
@@ -443,8 +446,10 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
             exit()
 
     # 検証
-    optimize_score, optimize_report = validation(args, stocks, terms, strategy_simulator, combination_setting, strategy_settings)
-    validate_score, validate_report = validation(args, stocks, validate_terms, strategy_simulator, combination_setting, strategy_settings)
+    validate_combination_setting = copy.copy(combination_setting)
+    validate_combination_setting.use_limit = False
+    optimize_score, optimize_report = validation(args, stocks, terms, strategy_simulator, validate_combination_setting, strategy_settings)
+    validate_score, validate_report = validation(args, stocks, validate_terms, strategy_simulator, validate_combination_setting, strategy_settings)
     print(validate_score)
 
     if args.output:
