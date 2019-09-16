@@ -346,7 +346,7 @@ def term_filter(args, term, validate_term):
 def create_performance(args, simulator_setting, performances):
     # レポート出力
     if args.performance:
-        filename = "settings/performance.json" if args.code is None else "simulate_settings/%s_performance.json" % args.code
+        filename = "settings/%sperformance.json" % strategy.get_prefix(args)
         with open(filename, "w") as f:
             f.write(json.dumps(performances))
 
