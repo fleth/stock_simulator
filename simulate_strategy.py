@@ -49,6 +49,7 @@ parser.add_argument("--random", type=int, action="store", default=0, dest="rando
 parser.add_argument("--skip_optimized", action="store_true", default=False, dest="skip_optimized", help="最適化済みなら最適化をスキップ")
 parser.add_argument("--ignore_optimize", action="store_true", default=False, dest="ignore_optimize", help="最適化を実施しない")
 parser.add_argument("--use_optimized_init", type=int, action="store", default=0, dest="use_optimized_init", help="どこまで初期値に最適化後の設定を使うか")
+parser.add_argument("--output_dir", type=str, action="store", default="simulate_settings", dest="output_dir", help="")
 parser.add_argument("--apply_compound_interest", action="store_true", default=False, dest="apply_compound_interest", help="複利を適用")
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser.add_argument("--use_cache", action="store_true", default=False, dest="use_cache", help="キャッシュを使う")
@@ -346,7 +347,7 @@ def term_filter(args, term, validate_term):
 def create_performance(args, simulator_setting, performances):
     # レポート出力
     if args.performance:
-        filename = "simulate_settings/%sperformance.json" % strategy.get_prefix(args)
+        filename = "%s/%sperformance.json" % (args.output_dir, strategy.get_prefix(args))
         with open(filename, "w") as f:
             f.write(json.dumps(performances))
 
@@ -375,7 +376,7 @@ def create_performance(args, simulator_setting, performances):
 def output_setting(args, strategy_settings, strategy_simulator, score, optimize_score, validate_score, optimize_report, validate_report):
     monitor_size = strategy_simulator.combination_setting.monitor_size
     monitor_size_ratio = (monitor_size / validate_report["average_trade_size"]) if validate_report["average_trade_size"] > 0 else 1
-    filename = "simulate_settings/%s" % strategy.get_filename(args)
+    filename = "%s/%s" % (args.output_dir, strategy.get_filename(args))
     output_dir = os.path.dirname(filename)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -502,14 +503,14 @@ subprocess.call(params)
 
 if args.random > 0:
     # 指定回数ランダムで最適化して検証スコアが高い
-    params = ["rm", "-rf", "simulate_settings/tmp"]
+    params = ["rm", "-rf", "%s/tmp" % args.output_dir]
     subprocess.call(params)
 
-    params = ["mkdir", "simulate_settings/tmp"]
+    params = ["mkdir", "%s/tmp" % args.output_dir]
     subprocess.call(params)
 
     filename = strategy.get_filename(args)
-    params = ["cp", "simulate_settings/%s" % (filename), "simulate_settings/tmp/default_%s" % filename]
+    params = ["cp", "%s/%s" % (args.output_dir, filename), "%s/tmp/default_%s" % (args.output_dir, filename)]
     status = subprocess.call(params)
 
     if status == 0 and args.skip_optimized:
@@ -519,7 +520,7 @@ if args.random > 0:
     for i in range(args.random):
         walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting)
 
-        params = ["cp", "simulate_settings/%s" % (filename), "simulate_settings/tmp/%s_%s" % (i, filename)]
+        params = ["cp", "%s/%s" % (args.output_dir, filename), "%s/tmp/%s_%s" % (args.output_dir,i, filename)]
         subprocess.call(params)
 
     params = ["sh", "simulator/copy_highest_score_setting.sh", strategy.get_prefix(args)]
