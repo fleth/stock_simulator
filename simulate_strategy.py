@@ -501,6 +501,9 @@ terms = sorted(terms, key=lambda x: x["start_date"])
 params = ["rm", "-rf", "settings/simulate.log"]
 subprocess.call(params)
 
+params = ["mkdir", "%s" % args.output_dir]
+subprocess.call(params)
+
 if args.random > 0:
     # 指定回数ランダムで最適化して検証スコアが高い
     params = ["rm", "-rf", "%s/tmp" % args.output_dir]
