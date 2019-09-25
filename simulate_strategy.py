@@ -366,6 +366,7 @@ def create_performance(args, simulator_setting, performances):
         "max_position_size": max(list(map(lambda x: x["max_position_size"], performances.values()))),
         "average_trade_size": round(average_trade_size),
         "max_unavailable_assets": max(list(map(lambda x: x["max_unavailable_assets"], performances.values()))),
+        "sum_contract_price": sum(list(map(lambda x: x["sum_contract_price"], performances.values()))),
         "trade": sum(list(map(lambda x: x["trade"], performances.values()))),
         "win_trade": sum(list(map(lambda x: x["win_trade"], performances.values()))),
     }
