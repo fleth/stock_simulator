@@ -57,6 +57,13 @@ parser.add_argument("--performance", action="store_true", default=False, dest="p
 parser = strategy.add_options(parser)
 args = parser.parse_args()
 
+# !!! for 使ってるので遅い !!!
+def to_jsonizable(dic):
+    jsonizable = {}
+    for k, v in dic.items():
+        jsonizable[k] = str(v)
+    return jsonizable
+
 # start を1/1, endを12/31にしてしまうと前後のデータがないのでロードに失敗する
 def create_cache_name(args):
     prefix = strategy.get_prefix(args)
@@ -179,7 +186,7 @@ def print_score_stats(name, score, score_stats, assets, strategy_setting):
     print(utils.timestamp(), name, stats, score)
     setting = {"name": name, "stats": stats, "score": score, "setting": strategy.strategy_setting_to_dict(strategy_setting)}
     with open("settings/simulate.log", "a") as f:
-        f.write(json.dumps(setting))
+        f.write(json.dumps(to_jsonizable(setting)))
         f.write("\n")
 
 def get_default_score(scores, simulator_setting, strategy_setting):
@@ -349,7 +356,7 @@ def create_performance(args, simulator_setting, performances):
     if args.performance:
         filename = "%s/%sperformance.json" % (args.output_dir, strategy.get_prefix(args))
         with open(filename, "w") as f:
-            f.write(json.dumps(performances))
+            f.write(json.dumps(to_jsonizable(performances)))
 
     # 簡易レポート
     for k, v in sorted(performances.items(), key=lambda x: utils.to_datetime(x[0])):
@@ -370,7 +377,7 @@ def create_performance(args, simulator_setting, performances):
         "trade": sum(list(map(lambda x: x["trade"], performances.values()))),
         "win_trade": sum(list(map(lambda x: x["win_trade"], performances.values()))),
     }
-    print(json.dumps(result))
+    print(json.dumps(to_jsonizable(result)))
 
     return result
 
