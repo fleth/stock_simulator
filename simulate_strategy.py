@@ -61,7 +61,12 @@ args = parser.parse_args()
 def to_jsonizable(dic):
     jsonizable = {}
     for k, v in dic.items():
-        jsonizable[k] = str(v)
+        if type(v) is dict:
+            jsonizable[k] = to_jsonizable(v)
+        elif "numpy" in str(type(v)):
+            jsonizable[k] = numpy.array([v]).tolist()[0]
+        else:
+            jsonizable[k] = v
     return jsonizable
 
 # start を1/1, endを12/31にしてしまうと前後のデータがないのでロードに失敗する
