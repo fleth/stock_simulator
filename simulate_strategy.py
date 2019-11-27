@@ -394,7 +394,7 @@ def output_setting(args, strategy_settings, strategy_simulator, score, optimize_
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     with open(filename, "w") as f:
-        f.write(json.dumps({
+        f.write(json.dumps(to_jsonizable({
             "date": args.date,
             "term": args.validate_term,
             "score": int(score),
@@ -412,7 +412,7 @@ def output_setting(args, strategy_settings, strategy_simulator, score, optimize_
             "optimize_report": optimize_report,
             "validate_report": validate_report,
             "use_limit": args.use_limit
-        }))
+        })))
 
 def validation(args, stocks, terms, strategy_simulator, combination_setting, strategy_settings):
     performances = {}
