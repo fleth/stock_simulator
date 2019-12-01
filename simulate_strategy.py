@@ -359,7 +359,7 @@ def term_filter(args, term, validate_term):
 def create_performance(args, simulator_setting, performances):
     # レポート出力
     if args.performance:
-        filename = "%s/%sperformance.json" % (args.output_dir, strategy.get_prefix(args))
+        filename = "%s/performances/%sperformance.json" % (args.output_dir, strategy.get_prefix(args))
         with open(filename, "w") as f:
             f.write(json.dumps(to_jsonizable(performances)))
 
@@ -514,7 +514,7 @@ terms = sorted(terms, key=lambda x: x["start_date"])
 params = ["rm", "-rf", "settings/simulate.log"]
 subprocess.call(params)
 
-params = ["mkdir", "%s" % args.output_dir]
+params = ["mkdir", "-p", "%s/performances" % args.output_dir]
 subprocess.call(params)
 
 if args.random > 0:
