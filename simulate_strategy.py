@@ -539,7 +539,7 @@ if args.random > 0:
         params = ["cp", "%s/%s" % (args.output_dir, filename), "%s/tmp/%s_%s" % (args.output_dir,i, filename)]
         subprocess.call(params)
 
-    params = ["sh", "simulator/copy_highest_score_setting.sh", strategy.get_prefix(args)]
+    params = ["sh", "simulator/copy_highest_score_setting.sh", strategy.get_prefix(args), args.output_dir]
     subprocess.call(params)
 else:
     walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting)
