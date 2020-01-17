@@ -387,8 +387,6 @@ def create_performance(args, simulator_setting, performances):
     return result
 
 def output_setting(args, strategy_settings, strategy_simulator, score, optimize_score, validate_score, optimize_report, validate_report):
-    monitor_size = strategy_simulator.combination_setting.monitor_size
-    monitor_size_ratio = (monitor_size / validate_report["average_trade_size"]) if validate_report["average_trade_size"] > 0 else 1
     filename = "%s/%s" % (args.output_dir, strategy.get_filename(args))
     output_dir = os.path.dirname(filename)
     if not os.path.exists(output_dir):
@@ -400,8 +398,6 @@ def output_setting(args, strategy_settings, strategy_simulator, score, optimize_
             "score": int(score),
             "optimize_score": int(optimize_score),
             "validate_score": int(validate_score),
-            "monitor_size": monitor_size,
-            "monitor_size_ratio": monitor_size_ratio,
             "max_position_size": strategy_simulator.combination_setting.max_position_size,
             "position_sizing": strategy_simulator.combination_setting.position_sizing,
             "stop_loss_rate": strategy_simulator.simulator_setting.stop_loss_rate,
