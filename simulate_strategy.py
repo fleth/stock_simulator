@@ -189,7 +189,7 @@ def print_score_stats(name, score, score_stats, assets, strategy_setting):
         "wt:", sum(score_stats["win_trade"])]
 
     print(utils.timestamp(), name, stats, score)
-    setting = {"name": name, "stats": stats, "score": score, "setting": strategy.strategy_setting_to_dict(strategy_setting)}
+    setting = {"name": name, "stats": stats, "score": score, "setting": strategy_setting.to_dict()}
     with open("settings/simulate.log", "a") as f:
         f.write(json.dumps(to_jsonizable(setting)))
         f.write("\n")
