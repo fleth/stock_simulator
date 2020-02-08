@@ -152,6 +152,11 @@ def get_score(args, scores, simulator_setting, strategy_setting):
         score = get_default_score(scores, simulator_setting, strategy_setting)
     return score
 
+def sorted_values(scores, key):
+    sorted_scroes = sorted(scores, key=lambda x:utils.to_datetime(x["start_date"]))
+    values = list(map(lambda x: x[key], sorted_scroes))
+    return values
+
 def get_score_stats(scores):
     gain = list(map(lambda x: x["gain"], scores))
     win = list(filter(lambda x: x > 0, gain))
@@ -172,23 +177,55 @@ def get_score_stats(scores):
         "profit_factor": profit_factor,
         "gain_per_trade": gain_per_trade,
         "trade": trade,
-        "win_trade": win_trade
+        "win_trade": win_trade,
+        "with_weight": get_score_stats_with_weight(scores),
     }
 
-def print_score_stats(name, score, score_stats, assets, strategy_setting):
+def get_score_stats_with_weight(scores):
+    stats = {}
+
+    term = len(scores)
+    # with weight
+    weight = 1.2 / term 
+    weights = numpy.array(list(range(term))) * weight
+    weights = numpy.power(weights, numpy.array([3] * len(weights)))
+    gains = numpy.array(sorted_values(scores, "gain")) * numpy.array(weights) # 過去の結果ほど重要度を下げ
+
+    profits = list(filter(lambda x: x > 0, gains))
+    loss = list(filter(lambda x: x < 0, gains))
+
+    stats["term"] = term
+    stats["min_loss"] = min(loss) if len(loss) > 0 else 0
+    stats["gain"] = sum(gains)
+    stats["max_gain"] = max(profits) if len(profits) > 0 else 0
+    stats["average_gain"] = numpy.average(profits).item() if len(profits) > 0 else 0
+    stats["median_gain"] = numpy.median(profits).item() if len(profits) > 0 else 0
+    stats["std_gain"] = numpy.std(profits).item() if len(profits) > 0 else 0
+    stats["profits"] = sum(profits) if len(profits) > 0 else 0
+    stats["loss"] = sum(loss) if len(loss) > 0 else 0
+
+    stats["win"] = len(profits)
+    stats["lose"] = len(loss)
+
+    stats["profit_factor"] = stats["profits"] / (abs(stats["loss"]) if stats["loss"] < 0 else 1)
+
+    stats["max_impact"] = float(stats["max_gain"] / sum(profits)) if stats["gain"] > 0 else 0
+    return stats
+
+def print_score_stats(name, score, score_with_weights, score_stats, assets, strategy_setting):
     stats = [
         "max_dd", "{:.2f}".format(max(score_stats["max_drawdown"])),
         "min:", "{:.2f}".format(min(score_stats["gain"]) / assets),
         "max:", "{:.2f}".format(max(score_stats["gain"]) / assets),
-        "sum:", sum(score_stats["gain"]),
-        "win:", sum(score_stats["win"]),
-        "lose:", sum(score_stats["lose"]),
+        "sum:", "{:.2f}".format(sum(score_stats["gain"])),
+        "win:", "{:.2f}".format(sum(score_stats["win"])),
+        "lose:", "{:.2f}".format(sum(score_stats["lose"])),
         "pf:", "{:.2f}".format(score_stats["profit_factor"]),
         "gpt:", "{:.2f}".format(score_stats["gain_per_trade"]),
         "t:", sum(score_stats["trade"]),
         "wt:", sum(score_stats["win_trade"])]
 
-    print(utils.timestamp(), name, stats, score)
+    print(utils.timestamp(), name, stats, "{:.2f}".format(score), "{:.2f}".format(score_with_weights))
     setting = {"name": name, "stats": stats, "score": score, "setting": strategy_setting.to_dict()}
     with open("settings/simulate.log", "a") as f:
         f.write(json.dumps(to_jsonizable(setting)))
@@ -198,20 +235,20 @@ def get_default_score(scores, simulator_setting, strategy_setting):
     score_stats = get_score_stats(scores)
 
     ignore = [
-#        len(list(filter(lambda x: x > 0.1, score_stats["max_drawdown"]))) > 0, # 最大ドローダウンが10%以上の期間が存在する
-#        len(list(filter(lambda x: x < -0.1, score_stats["gain"]))) > 0, # 10%以上の損失が存在する
-#        len(list(filter(lambda x: x > 0, gain))) < len(scores) / 2, # 利益が出ている期間が半分以下
         sum(score_stats["gain"]) <= 0, # 損益がマイナス
         sum(score_stats["trade"]) < 30, # 取引数が少ない
         score_stats["profit_factor"] < 1.5, # プロフィットファクター（総純利益 / 総損失）が1.5以下
-#        gain_per_trade < 5000, # 1トレードあたりの平均利益が5000円以下
     ]
 
-    score = score_stats["profit_factor"] * sum(score_stats["gain"]) * (1 - max(score_stats["max_drawdown"]))
     if any(ignore):
         score = 0
+        score_with_weights = 0
+    else:
+        score = score_stats["profit_factor"] * sum(score_stats["gain"]) * (1 - max(score_stats["max_drawdown"]))
+        score_with_weights = get_score_with_weight(score_stats["with_weight"])
+        score = score * score_with_weights
 
-    print_score_stats("default:", score, score_stats, simulator_setting.assets, strategy_setting)
+    print_score_stats("default:", score, score_with_weights, score_stats, simulator_setting.assets, strategy_setting)
 
     return score
 
@@ -219,21 +256,38 @@ def get_daytrade_score(scores, simulator_setting, strategy_setting):
     score_stats = get_score_stats(scores)
 
     ignore = [
-#        len(list(filter(lambda x: x > 0.1, max_drawdown))), # 最大ドローダウンが10%以上の期間が存在する
-#        len(list(filter(lambda x: x > 0, gain))) < len(scores) / 2, # 利益が出ている期間が半分以下
         sum(score_stats["gain"]) <= 0, # 損益がマイナス
-#        sum(score_stats["trade"]) < 30, # 取引数が少ない
-#        score_stats["profit_factor"] < 1.5, # プロフィットファクター（総純利益 / 総損失）が1.5以下
         score_stats["profit_factor"] < 1.1, # プロフィットファクター（総純利益 / 総損失）が1.5以下
-#        gain_per_trade < 5000, # 1トレードあたりの平均利益が5000円以下
     ]
 
-    score = score_stats["profit_factor"] * sum(score_stats["gain"]) * (1 - max(score_stats["max_drawdown"])) * sum(score_stats["win_trade"])
     if any(ignore):
         score = 0
+        score_with_weights = 0
+    else:
+        score = score_stats["profit_factor"] * sum(score_stats["gain"]) * (1 - max(score_stats["max_drawdown"])) * sum(score_stats["win_trade"])
+        score_with_weights = get_score_with_weight(score_stats["with_weight"])
+        score = score * score_with_weights
 
-    print_score_stats("daytrade:", score, score_stats, simulator_setting.assets, strategy_setting)
+    print_score_stats("daytrade:", score, score_with_weights, score_stats, simulator_setting.assets, strategy_setting)
 
+    return score
+
+def get_score_with_weight(stats):
+    ignore_conditions = [
+        stats["gain"] <= 0,
+        stats["std_gain"] == 0,
+        stats["max_impact"] > 0.3, # 総利益の30%以上を一か月で得ている場合除外
+    ]
+
+    if any(ignore_conditions):
+        score = 0
+    else:
+        win_rate = (stats["win"] / stats["term"]) # 勝率が高い
+        impact_per_trade = (1 - stats["max_impact"]) # 特定のトレードの重要度が低い
+
+        score = (stats["average_gain"] * stats["median_gain"]) / stats["std_gain"]
+
+        score = score * stats["profit_factor"] * win_rate * impact_per_trade
     return score
 
 def simulate_by_term(param):
