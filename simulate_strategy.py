@@ -77,7 +77,7 @@ def create_cache_name(args):
     return "%s%s" % (prefix, "_".join(params))
 
 def create_setting(args, assets):
-    setting = strategy.create_simulator_setting(args)
+    setting = strategy.create_simulator_setting(args, args.optimize_count == 0)
     setting.min_data_length = args.validate_term * 10
     setting.assets = assets
     setting.commission = args.commission
