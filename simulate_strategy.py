@@ -14,7 +14,6 @@ from multiprocessing import Pool
 from argparse import ArgumentParser
 
 sys.path.append("lib")
-import cache
 import utils
 import slack
 import strategy
@@ -52,8 +51,8 @@ parser.add_argument("--use_optimized_init", type=int, action="store", default=0,
 parser.add_argument("--output_dir", type=str, action="store", default="simulate_settings", dest="output_dir", help="")
 parser.add_argument("--apply_compound_interest", action="store_true", default=False, dest="apply_compound_interest", help="複利を適用")
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
-parser.add_argument("--use_cache", action="store_true", default=False, dest="use_cache", help="キャッシュを使う")
 parser.add_argument("--performance", action="store_true", default=False, dest="performance", help="パフォーマンスレポートを出力する")
+parser.add_argument("--with_weights", action="store_true", default=False, dest="with_weights", help="重みを引き継ぐ")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
 
@@ -69,13 +68,6 @@ def to_jsonizable(dic):
             jsonizable[k] = v
     return jsonizable
 
-# start を1/1, endを12/31にしてしまうと前後のデータがないのでロードに失敗する
-def create_cache_name(args):
-    prefix = strategy.get_prefix(args)
-    params = [args.date, args.validate_term, args.count, args.optimize_count, args.daytrade]
-    params = list(map(lambda x: str(x), params))
-    return "%s%s" % (prefix, "_".join(params))
-
 def create_setting(args, assets):
     setting = strategy.create_simulator_setting(args, args.optimize_count == 0)
     setting.min_data_length = args.validate_term * 10
@@ -90,39 +82,18 @@ def create_simulator_data(param):
     end_date = param["end_date"]
     args = param["args"]
 
-    cacher = cache.Cache("/tmp/simulator")
-    name = "_".join([create_cache_name(args), str(code), start_date, end_date])
-    if cacher.exists(name) and args.use_cache:
-        data = cacher.get(name)
-        print("cache loaded:", code, start_date, end_date)
-    else:
-        data = strategy.load_simulator_data(code, start_date, end_date, args)
-        cacher.create(name, data)
+    data = strategy.load_simulator_data(code, start_date, end_date, args)
 
     return data
 
-def load_index(args, start_date, end_date):
-    index = {}
-
-    if args.daytrade:
-        return index # 指標はティックデータない
-
-    for k in ["nikkei"]:
-        d = Loader.load_index(k, start_date, end_date, with_filter=True, strict=False)
-        d = utils.add_stats(d)
-        d = utils.add_cs_stats(d)
-        index[k] = d
-
-    return index
-
 def load(args, codes, terms, daterange, combination_setting):
     min_start_date = min(list(map(lambda x: x["start_date"], terms)))
-    prepare_term = utils.relativeterm(args.validate_term, args.daytrade)
+    prepare_term = utils.relativeterm(args.validate_term)
     start_date = utils.to_format(min_start_date - prepare_term)
     end_date = utils.format(args.date)
     strategy_creator = strategy.load_strategy_creator(args, combination_setting)
 
-    print("loading %s %s %s" % (len(codes), start_date, end_date))
+#    print("loading %s %s %s" % (len(codes), start_date, end_date))
     data = {}
     params = list(map(lambda x: {"code": x, "start_date": utils.to_format(daterange[x][0]), "end_date": utils.to_format(daterange[x][-1]), "args": args}, codes))
 
@@ -132,7 +103,7 @@ def load(args, codes, terms, daterange, combination_setting):
         for r in ret:
             if r is None:
                 continue
-            print("add_data: ", utils.timestamp(), r.code)
+#            print("add_data: ", utils.timestamp(), r.code)
             data[r.code] = strategy_creator.add_data(r)
     except KeyboardInterrupt:
         p.close()
@@ -140,16 +111,13 @@ def load(args, codes, terms, daterange, combination_setting):
     finally:
         p.close()
 
-    index = load_index(args, start_date, end_date)
+    index = strategy.load_index(args, start_date, end_date)
 
     print("loading done")
     return {"data": data, "index": index, "args": args}
 
 def get_score(args, scores, simulator_setting, strategy_setting):
-    if args.daytrade:
-        score = get_daytrade_score(scores, simulator_setting, strategy_setting)
-    else:
-        score = get_default_score(scores, simulator_setting, strategy_setting)
+    score = get_default_score(scores, simulator_setting, strategy_setting)
     return score
 
 def sorted_values(scores, key):
@@ -158,6 +126,7 @@ def sorted_values(scores, key):
     return values
 
 def get_score_stats(scores):
+    term = len(scores)
     gain = list(map(lambda x: x["gain"], scores))
     win = list(filter(lambda x: x > 0, gain))
     lose = list(filter(lambda x: x < 0, gain))
@@ -165,10 +134,11 @@ def get_score_stats(scores):
     max_drawdown = list(map(lambda x: x["max_drawdown"], scores))
     trade = list(map(lambda x: x["trade"], scores))
     win_trade = list(map(lambda x: x["win_trade"], scores))
-    profit_factor = sum(win) / abs(sum(lose)) if abs(sum(lose)) > 0 else sum(win)
+    profit_factor = sum(win) / abs(sum(lose)) if abs(sum(lose)) > 0 else 1
     gain_per_trade = sum(gain) / sum(trade) if sum(trade) > 0 else 0
 
     return {
+        "term": term,
         "gain": gain,
         "win": win,
         "lose": lose,
@@ -178,41 +148,9 @@ def get_score_stats(scores):
         "gain_per_trade": gain_per_trade,
         "trade": trade,
         "win_trade": win_trade,
-        "with_weight": get_score_stats_with_weight(scores),
     }
 
-def get_score_stats_with_weight(scores):
-    stats = {}
-
-    term = len(scores)
-    # with weight
-    weight = 1.2 / term 
-    weights = numpy.array(list(range(term))) * weight
-    weights = numpy.power(weights, numpy.array([3] * len(weights)))
-    gains = numpy.array(sorted_values(scores, "gain")) * numpy.array(weights) # 過去の結果ほど重要度を下げ
-
-    profits = list(filter(lambda x: x > 0, gains))
-    loss = list(filter(lambda x: x < 0, gains))
-
-    stats["term"] = term
-    stats["min_loss"] = min(loss) if len(loss) > 0 else 0
-    stats["gain"] = sum(gains)
-    stats["max_gain"] = max(profits) if len(profits) > 0 else 0
-    stats["average_gain"] = numpy.average(profits).item() if len(profits) > 0 else 0
-    stats["median_gain"] = numpy.median(profits).item() if len(profits) > 0 else 0
-    stats["std_gain"] = numpy.std(profits).item() if len(profits) > 0 else 0
-    stats["profits"] = sum(profits) if len(profits) > 0 else 0
-    stats["loss"] = sum(loss) if len(loss) > 0 else 0
-
-    stats["win"] = len(profits)
-    stats["lose"] = len(loss)
-
-    stats["profit_factor"] = stats["profits"] / (abs(stats["loss"]) if stats["loss"] < 0 else 1)
-
-    stats["max_impact"] = float(stats["max_gain"] / sum(profits)) if stats["gain"] > 0 else 0
-    return stats
-
-def print_score_stats(name, score, score_with_weights, score_stats, assets, strategy_setting):
+def print_score_stats(name, score, score_stats, assets, strategy_setting):
     stats = [
         "max_dd", "{:.2f}".format(max(score_stats["max_drawdown"])),
         "min:", "{:.2f}".format(min(score_stats["gain"]) / assets),
@@ -220,12 +158,10 @@ def print_score_stats(name, score, score_with_weights, score_stats, assets, stra
         "sum:", "{:.2f}".format(sum(score_stats["gain"])),
         "win:", "{:.2f}".format(sum(score_stats["win"])),
         "lose:", "{:.2f}".format(sum(score_stats["lose"])),
-        "pf:", "{:.2f}".format(score_stats["profit_factor"]),
-        "gpt:", "{:.2f}".format(score_stats["gain_per_trade"]),
         "t:", sum(score_stats["trade"]),
         "wt:", sum(score_stats["win_trade"])]
 
-    print(utils.timestamp(), name, stats, "{:.2f}".format(score), "{:.2f}".format(score_with_weights))
+    print(utils.timestamp(), name, stats, "{:.2f}".format(score))
     setting = {"name": name, "stats": stats, "score": score, "setting": strategy_setting.to_dict()}
     with open("settings/simulate.log", "a") as f:
         f.write(json.dumps(to_jsonizable(setting)))
@@ -236,58 +172,17 @@ def get_default_score(scores, simulator_setting, strategy_setting):
 
     ignore = [
         sum(score_stats["gain"]) <= 0, # 損益がマイナス
-        sum(score_stats["trade"]) < 30, # 取引数が少ない
+        sum(score_stats["trade"]) < score_stats["term"] / 2, # 取引数が少ない
         score_stats["profit_factor"] < 1.5, # プロフィットファクター（総純利益 / 総損失）が1.5以下
     ]
 
     if any(ignore):
         score = 0
-        score_with_weights = 0
     else:
-        score = score_stats["profit_factor"] * sum(score_stats["gain"]) * (1 - max(score_stats["max_drawdown"]))
-        score_with_weights = get_score_with_weight(score_stats["with_weight"])
-        score = score * score_with_weights
+        score = sum(score_stats["trade"]) * (sum(score_stats["gain"]) / 10000) * (1 - max(score_stats["max_drawdown"]))
 
-    print_score_stats("default:", score, score_with_weights, score_stats, simulator_setting.assets, strategy_setting)
+    print_score_stats("", score, score_stats, simulator_setting.assets, strategy_setting)
 
-    return score
-
-def get_daytrade_score(scores, simulator_setting, strategy_setting):
-    score_stats = get_score_stats(scores)
-
-    ignore = [
-        sum(score_stats["gain"]) <= 0, # 損益がマイナス
-        score_stats["profit_factor"] < 1.1, # プロフィットファクター（総純利益 / 総損失）が1.5以下
-    ]
-
-    if any(ignore):
-        score = 0
-        score_with_weights = 0
-    else:
-        score = score_stats["profit_factor"] * sum(score_stats["gain"]) * (1 - max(score_stats["max_drawdown"])) * sum(score_stats["win_trade"])
-        score_with_weights = get_score_with_weight(score_stats["with_weight"])
-        score = score * score_with_weights
-
-    print_score_stats("daytrade:", score, score_with_weights, score_stats, simulator_setting.assets, strategy_setting)
-
-    return score
-
-def get_score_with_weight(stats):
-    ignore_conditions = [
-        stats["gain"] <= 0,
-        stats["std_gain"] == 0,
-        stats["max_impact"] > 0.3, # 総利益の30%以上を一か月で得ている場合除外
-    ]
-
-    if any(ignore_conditions):
-        score = 0
-    else:
-        win_rate = (stats["win"] / stats["term"]) # 勝率が高い
-        impact_per_trade = (1 - stats["max_impact"]) # 特定のトレードの重要度が低い
-
-        score = (stats["average_gain"] * stats["median_gain"]) / stats["std_gain"]
-
-        score = score * stats["profit_factor"] * win_rate * impact_per_trade
     return score
 
 def simulate_by_term(param):
@@ -302,19 +197,18 @@ def select_data(codes, stocks, start, end):
     for code in codes:
         if not code in stocks["data"].keys():
             continue
-        start_date = utils.to_format(utils.to_datetime_by_term(start,args.daytrade) - utils.relativeterm(1, args.daytrade))
+        start_date = utils.to_format(utils.to_datetime_by_term(start) - utils.relativeterm(1))
         select["data"][code] = stocks["data"][code].split(start_date, end)
 
     return select
 
 def simulate_params(stocks, terms, strategy_simulator):
-    daytrade = stocks["args"].daytrade
     params = []
     strategy_simulator.simulator_setting.strategy = None
     for term in terms:
         # term毎にデータを分けてシミュレートした結果の平均をスコアとして返す
-        start = utils.to_format_by_term(term["start_date"], daytrade)
-        end = utils.to_format_by_term(term["end_date"], daytrade)
+        start = utils.to_format_by_term(term["start_date"])
+        end = utils.to_format_by_term(term["end_date"])
         codes, _, _ = strategy_simulator.select_codes(stocks["args"], start, end)
         select = select_data(codes, stocks, start, end)
 
@@ -336,7 +230,7 @@ def simulate_by_multiple_term(stocks, params):
 # パラメータ評価用の関数
 # 指定戦略を全銘柄に対して最適化
 def objective(args, strategy_setting, stocks, params, validate_params, strategy_simulator):
-    print(strategy_setting.__dict__)
+    print(strategy_setting.__dict__, strategy_simulator.combination_setting.seed)
     try:
         params = list(map(lambda x: (strategy_simulator, strategy_setting) + x, params))
         scores = simulate_by_multiple_term(stocks, params)
@@ -375,8 +269,8 @@ def create_terms(args):
 
     valid_end_date = utils.to_datetime(args.date)
     for c in range(args.count):
-        end_date = valid_end_date - utils.relativeterm(args.validate_term, args.daytrade)
-        start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count, args.daytrade)
+        end_date = valid_end_date - utils.relativeterm(args.validate_term)
+        start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count)
         term = {"start_date": start_date, "end_date": end_date}
         validate_term = {"start_date": end_date, "end_date": valid_end_date}
         term, validate_term = term_filter(args, term, validate_term)
@@ -392,22 +286,6 @@ def create_terms(args):
     return terms, validate_terms
 
 def term_filter(args, term, validate_term):
-    if not args.daytrade:
-        return term, validate_term
-
-    if args.code in Bitcoin().exchanges:
-        term["start_date"] += datetime.timedelta(days=1)
-        term["end_date"] += datetime.timedelta(days=1)
-        validate_term["start_date"] += datetime.timedelta(days=1)
-        validate_term["end_date"] += datetime.timedelta(days=1)
-        return term, validate_term
-
-    term["start_date"] += datetime.timedelta(days=1)
-    term["start_date"] += datetime.timedelta(hours=9)
-    term["end_date"] += datetime.timedelta(hours=15)
-    validate_term["start_date"] += datetime.timedelta(days=1)
-    validate_term["start_date"] += datetime.timedelta(hours=9)
-    validate_term["end_date"] += datetime.timedelta(hours=15)
     return term, validate_term
 
 def create_performance(args, simulator_setting, performances):
@@ -418,8 +296,10 @@ def create_performance(args, simulator_setting, performances):
             f.write(json.dumps(to_jsonizable(performances)))
 
     # 簡易レポート
-    for k, v in sorted(performances.items(), key=lambda x: utils.to_datetime(x[0])):
-        print(k, v)
+    for date, performance in sorted(performances.items(), key=lambda x: utils.to_datetime(x[0])):
+        pickup = ["gain", "trade", "win_trade", "max_drawdown", "max_unavailable_assets", "max_position_term"]
+        stats = list(map(lambda x: "%s: %s" % (x, performance[x]), pickup))
+        print(date, ",\t".join(stats))
 
     gain = sum(list(map(lambda x: x["gain"], performances.values())))
     average_trade_size = numpy.average(list(map(lambda x: len(x["codes"]), performances.values())))
@@ -459,6 +339,7 @@ def output_setting(args, strategy_settings, strategy_simulator, score, optimize_
             "min_unit": strategy_simulator.simulator_setting.min_unit,
             "setting": list(map(lambda x: x.__dict__, strategy_settings)),
             "seed": strategy_simulator.combination_setting.seed,
+            "weights": strategy_simulator.combination_setting.weights,
             "optimize_report": optimize_report,
             "validate_report": validate_report,
             "use_limit": args.use_limit
@@ -477,7 +358,7 @@ def validation(args, stocks, terms, strategy_simulator, combination_setting, str
             strategy_simulator.simulator_setting.assets += result["gain"]
             print("assets:", strategy_simulator.simulator_setting.assets, result["gain"])
 
-        performances[utils.to_format(utils.to_datetime_by_term(end_date, args.daytrade))] = result
+        performances[utils.to_format(utils.to_datetime_by_term(end_date))] = result
 
     # 検証スコア
     score = -get_score(args, performances.values(), strategy_simulator.simulator_setting, strategy_settings[-1])
@@ -488,38 +369,66 @@ def validation(args, stocks, terms, strategy_simulator, combination_setting, str
     return score, report
 
 def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting):
+    default_weights = copy.deepcopy(combination_setting.weights)
+    print("weights", default_weights)
+
+    is_optimize = args.optimize_count > 0 and not args.ignore_optimize
+
     # 最適化
-    if args.optimize_count > 0 and not args.ignore_optimize:
-        strategy_simulator.combination_setting = combination_setting
+    if is_optimize:
+        strategy_simulator.combination_setting = copy.deepcopy(combination_setting)
 
         if args.use_optimized_init == 0:
-            strategy_simulator.combination_setting.seed = [time.time()]
+            strategy_simulator.combination_setting.seed = [int(time.time())]
         else:
             strategy_simulator.combination_setting.seed = combination_setting.seed[:args.use_optimized_init] + [time.time()]
 
+        conditions_index = strategy_simulator.strategy_creator(args).conditions_index()
         params = simulate_params(stocks, terms, strategy_simulator)
         validate_params = simulate_params(stocks, validate_terms, strategy_simulator)
         strategy_setting, score = strategy_optimize(args, stocks, params, validate_params, strategy_simulator)
+
         objective(args, strategy_setting, stocks, params, validate_params, strategy_simulator) # 選ばれた戦略スコアを表示するため
         strategy_settings = strategy_simulator.strategy_settings[:args.use_optimized_init] + [strategy_setting]
-        print(strategy_setting.__dict__)
+        validate_combination_setting = copy.copy(strategy_simulator.combination_setting)
+        print(strategy_setting.__dict__, score)
+        if score < 0:
+            weights = update_weights(conditions_index, default_weights)
+        else:
+            weights = default_weights
     else:
         _, strategy_settings = strategy.load_strategy_setting(args)
         if args.output:
             print("Need -o parameter or Using --ignore_optimize. don't output simulate setting.")
             exit()
+        validate_combination_setting = copy.deepcopy(combination_setting)
+        weights = default_weights
 
     # 検証
-    validate_combination_setting = copy.copy(combination_setting)
     validate_combination_setting.use_limit = False
+    print("===== [optimize] =====")
     optimize_score, optimize_report = validation(args, stocks, terms, strategy_simulator, validate_combination_setting, strategy_settings)
+    print("===== [validate] =====")
     validate_score, validate_report = validation(args, stocks, validate_terms, strategy_simulator, validate_combination_setting, strategy_settings)
-    print(validate_score)
 
     if args.output:
         print("strategy_setting:", len(strategy_settings))
         output_setting(args, strategy_settings, strategy_simulator, score, optimize_score, validate_score, optimize_report, validate_report)
 
+    return weights 
+
+def update_weights(conditions_index, weights):
+    for method, indexies in conditions_index.items():
+        for index in indexies:
+            i = int(index)
+            if not method in weights.keys():
+                weights[method] = {}
+
+            if index in weights[method].keys():
+                weights[method][i] = weights[method][i] + 10
+            else:
+                weights[method][i] = 10
+    return weights
 
 ######################################################################
 print(utils.timestamp())
@@ -531,7 +440,7 @@ if args.assets is None:
 else:
     simulate_setting = create_setting(args, args.assets)
 
-if args.optimize_count > 0 and not args.ignore_optimize and args.use_optimized_init == 0:
+if args.optimize_count > 0 and not args.ignore_optimize and args.use_optimized_init == 0 and not args.with_weights:
     combination_setting = strategy.create_combination_setting(args, use_json=False)
     strategy_settings = []
 else:
@@ -546,16 +455,14 @@ strategy_simulator = StrategySimulator(simulate_setting, combination_setting, st
 # 都度読み込むと遅いので全部読み込んでおく
 terms, validate_terms = create_terms(args)
 min_start_date = min(list(map(lambda x: x["start_date"], terms)))
-start = utils.to_format_by_term(min_start_date, args.daytrade)
+start = utils.to_format_by_term(min_start_date)
 end = utils.to_datetime(args.date)
-if args.daytrade:
-    end += datetime.timedelta(hours=15)
-end = utils.to_format_by_term(end, args.daytrade)
+end = utils.to_format_by_term(end)
 codes, validate_codes, daterange = strategy_simulator.select_codes(args, start, end)
 
 print("target : %s" % codes, start, end)
 
-stocks = load(args, codes, terms, daterange, combination_setting)
+stocks = load(args, list(set(codes + validate_codes)), terms, daterange, combination_setting)
 
 # 期間ごとに最適化
 terms = sorted(terms, key=lambda x: x["start_date"])
@@ -583,8 +490,11 @@ if args.random > 0:
         print("skip. optimized.")
         exit()
 
+    if args.with_weights:
+        strategy_simulator.combination_setting.weights = update_weights(strategy_simulator.strategy_creator(args).conditions_index(), combination_setting.weights)
+
     for i in range(args.random):
-        walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting)
+        combination_setting.weights = walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting)
 
         params = ["cp", "%s/%s" % (args.output_dir, filename), "%s/tmp/%s_%s" % (args.output_dir,i, filename)]
         subprocess.call(params)
