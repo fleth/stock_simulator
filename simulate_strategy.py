@@ -381,7 +381,7 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
         if args.use_optimized_init == 0:
             strategy_simulator.combination_setting.seed = [int(time.time())]
         else:
-            strategy_simulator.combination_setting.seed = combination_setting.seed[:args.use_optimized_init] + [time.time()]
+            strategy_simulator.combination_setting.seed = combination_setting.seed[:args.use_optimized_init] + [int(time.time())]
 
         conditions_index = strategy_simulator.strategy_creator(args).conditions_index()
         params = simulate_params(stocks, terms, strategy_simulator)
