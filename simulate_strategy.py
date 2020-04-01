@@ -320,7 +320,7 @@ def create_performance(args, simulator_setting, performances):
 
     return result
 
-def output_setting(args, strategy_settings, strategy_simulator, score, optimize_score, validate_score, optimize_report, validate_report):
+def output_setting(args, strategy_settings, strategy_simulator, score, optimize_score, validate_score, optimize_report, validate_report, performance_score):
     filename = "%s/%s" % (args.output_dir, strategy.get_filename(args))
     output_dir = os.path.dirname(filename)
     if not os.path.exists(output_dir):
@@ -329,7 +329,7 @@ def output_setting(args, strategy_settings, strategy_simulator, score, optimize_
         f.write(json.dumps(to_jsonizable({
             "date": args.date,
             "term": args.validate_term,
-            "score": int(score),
+            "score": int(score) * float(performance_score),
             "optimize_score": int(optimize_score),
             "validate_score": int(validate_score),
             "max_position_size": strategy_simulator.combination_setting.max_position_size,
@@ -342,8 +342,31 @@ def output_setting(args, strategy_settings, strategy_simulator, score, optimize_
             "weights": strategy_simulator.combination_setting.weights,
             "optimize_report": optimize_report,
             "validate_report": validate_report,
-            "use_limit": args.use_limit
+            "use_limit": args.use_limit,
+            "performance_score": float(performance_score)
         })))
+
+def get_performance_score(optimize_performances, validate_performances):
+    performances = {}
+    performances.update(optimize_performances)
+    performances.update(validate_performances)
+
+    sum_gain = sum(list(map(lambda x: x["gain"], performances.values()))) # 総利益
+    sum_trade = sum(list(map(lambda x: x["trade"], performances.values()))) # 総トレード数
+    ave_trade = numpy.average(list(map(lambda x: x["trade"], performances.values()))) # 平均トレード数
+    gain_per_trade = sum_gain / sum_trade # 1トレード当たりの利益
+
+    average_line = [i*ave_trade * gain_per_trade for i in range(1, len(performances)+1)]
+
+    gain = 0
+    diff = []
+    for ave, d in zip(average_line, sorted(performances.items(), key=lambda x:utils.to_datetime(x[0]))):
+        gain = gain + d[1]["gain"]
+        diff = diff + [abs(ave - gain)]
+
+    score = 1 / sum(diff)
+
+    return score
 
 def validation(args, stocks, terms, strategy_simulator, combination_setting, strategy_settings):
     performances = {}
@@ -366,7 +389,7 @@ def validation(args, stocks, terms, strategy_simulator, combination_setting, str
     # 結果の表示 =============================================================================
     report = create_performance(args, strategy_simulator.simulator_setting, performances)
 
-    return score, report
+    return score, report, performances
 
 def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting):
     default_weights = copy.deepcopy(combination_setting.weights)
@@ -407,13 +430,16 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
     # 検証
     validate_combination_setting.use_limit = False
     print("===== [optimize] =====")
-    optimize_score, optimize_report = validation(args, stocks, terms, strategy_simulator, validate_combination_setting, strategy_settings)
+    optimize_score, optimize_report, optimize_performances = validation(args, stocks, terms, strategy_simulator, validate_combination_setting, strategy_settings)
     print("===== [validate] =====")
-    validate_score, validate_report = validation(args, stocks, validate_terms, strategy_simulator, validate_combination_setting, strategy_settings)
+    validate_score, validate_report, validate_performances = validation(args, stocks, validate_terms, strategy_simulator, validate_combination_setting, strategy_settings)
+
+    performance_score = get_performance_score(optimize_performances, validate_performances)
+    print("performance_score:", performance_score)
 
     if args.output:
         print("strategy_setting:", len(strategy_settings))
-        output_setting(args, strategy_settings, strategy_simulator, score, optimize_score, validate_score, optimize_report, validate_report)
+        output_setting(args, strategy_settings, strategy_simulator, score, optimize_score, validate_score, optimize_report, validate_report, performance_score)
 
     return weights 
 
