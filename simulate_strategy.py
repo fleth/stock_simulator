@@ -212,7 +212,8 @@ def simulate_params(stocks, terms, strategy_simulator):
         codes, _, _ = strategy_simulator.select_codes(stocks["args"], start, end)
         select = select_data(codes, stocks, start, end)
 
-        params.append((select, start, end))
+        # closingのタイミングの都合で開始と1日重なってしまうので足しておく
+        params.append((select, utils.to_format(utils.to_datetime(start) + utils.relativeterm(1, True)), end))
     return params
 
 # 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
@@ -354,7 +355,7 @@ def get_performance_score(optimize_performances, validate_performances):
     sum_gain = sum(list(map(lambda x: x["gain"], performances.values()))) # 総利益
     sum_trade = sum(list(map(lambda x: x["trade"], performances.values()))) # 総トレード数
     ave_trade = numpy.average(list(map(lambda x: x["trade"], performances.values()))) # 平均トレード数
-    gain_per_trade = sum_gain / sum_trade # 1トレード当たりの利益
+    gain_per_trade = 0 if sum_trade == 0 else (sum_gain / sum_trade)# 1トレード当たりの利益
 
     average_line = [i*ave_trade * gain_per_trade for i in range(1, len(performances)+1)]
 
@@ -364,7 +365,7 @@ def get_performance_score(optimize_performances, validate_performances):
         gain = gain + d[1]["gain"]
         diff = diff + [abs(ave - gain)]
 
-    score = 1 / sum(diff)
+    score = 0 if sum(diff) == 0 else 1 / sum(diff)
 
     return score
 
