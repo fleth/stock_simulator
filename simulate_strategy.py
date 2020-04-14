@@ -168,6 +168,9 @@ def print_score_stats(name, score, score_stats, assets, strategy_setting):
         f.write("\n")
 
 def get_default_score(scores, simulator_setting, strategy_setting):
+    if len(scores) == 0:
+        return 0
+
     score_stats = get_score_stats(scores)
 
     ignore = [
@@ -265,7 +268,7 @@ def strategy_optimize(args, stocks, params, validate_params, strategy_simulator)
     return result, score
 
 def create_terms(args):
-    terms = []
+    optimize_terms = []
     validate_terms = []
 
     valid_end_date = utils.to_datetime(args.date)
@@ -274,27 +277,28 @@ def create_terms(args):
         start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count)
         term = {"start_date": start_date, "end_date": end_date}
         validate_term = {"start_date": end_date, "end_date": valid_end_date}
-        term, validate_term = term_filter(args, term, validate_term)
-        terms.append(term)
+
+        if args.optimize_count > 0:
+            optimize_terms.append(term)
         validate_terms.append(validate_term)
+
         valid_end_date = start_date
-    print(list(map(lambda x: "%s - %s" % (str(x["start_date"]), str(x["end_date"])), terms)))
+    print(list(map(lambda x: "%s - %s" % (str(x["start_date"]), str(x["end_date"])), optimize_terms)))
     print(list(map(lambda x: "%s - %s" % (str(x["start_date"]), str(x["end_date"])), validate_terms)))
 
-    terms = sorted(terms, key=lambda x: x["start_date"])
+    optimize_terms = sorted(optimize_terms, key=lambda x: x["start_date"])
     validate_terms = sorted(validate_terms, key=lambda x: x["start_date"])
 
-    return terms, validate_terms
+    return optimize_terms, validate_terms
 
-def term_filter(args, term, validate_term):
-    return term, validate_term
+def output_performance(args, performances):
+    filename = "%s/performances/%sperformance.json" % (args.output_dir, strategy.get_prefix(args))
+    with open(filename, "w") as f:
+        f.write(json.dumps(to_jsonizable(performances)))
 
 def create_performance(args, simulator_setting, performances):
-    # レポート出力
-    if args.performance:
-        filename = "%s/performances/%sperformance.json" % (args.output_dir, strategy.get_prefix(args))
-        with open(filename, "w") as f:
-            f.write(json.dumps(to_jsonizable(performances)))
+    if len(performances) == 0:
+        return {}
 
     # 簡易レポート
     for date, performance in sorted(performances.items(), key=lambda x: utils.to_datetime(x[0])):
@@ -435,6 +439,13 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
     print("===== [validate] =====")
     validate_score, validate_report, validate_performances = validation(args, stocks, validate_terms, strategy_simulator, validate_combination_setting, strategy_settings)
 
+    # レポート出力
+    if args.performance:
+        performances = {}
+        performances.update(optimize_performances)
+        performances.update(validate_performances)
+        output_performance(args, performances)
+
     performance_score = get_performance_score(optimize_performances, validate_performances)
     print("performance_score:", performance_score)
 
@@ -480,8 +491,8 @@ strategy_simulator = StrategySimulator(simulate_setting, combination_setting, st
 
 # 翌期間用の設定を出力する
 # 都度読み込むと遅いので全部読み込んでおく
-terms, validate_terms = create_terms(args)
-min_start_date = min(list(map(lambda x: x["start_date"], terms)))
+optimize_terms, validate_terms = create_terms(args)
+min_start_date = min(list(map(lambda x: x["start_date"], optimize_terms + validate_terms)))
 start = utils.to_format_by_term(min_start_date)
 end = utils.to_datetime(args.date)
 end = utils.to_format_by_term(end)
@@ -489,10 +500,7 @@ codes, validate_codes, daterange = strategy_simulator.select_codes(args, start, 
 
 print("target : %s" % codes, start, end)
 
-stocks = load(args, list(set(codes + validate_codes)), terms, daterange, combination_setting)
-
-# 期間ごとに最適化
-terms = sorted(terms, key=lambda x: x["start_date"])
+stocks = load(args, list(set(codes + validate_codes)), optimize_terms + validate_terms, daterange, combination_setting)
 
 # 結果ログを削除
 params = ["rm", "-rf", "settings/simulate.log"]
@@ -521,7 +529,7 @@ if args.random > 0:
         strategy_simulator.combination_setting.weights = update_weights(strategy_simulator.strategy_creator(args).conditions_index(), combination_setting.weights)
 
     for i in range(args.random):
-        combination_setting.weights = walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting)
+        combination_setting.weights = walkforward(args, stocks, optimize_terms, validate_terms, strategy_simulator, combination_setting)
 
         params = ["cp", "%s/%s" % (args.output_dir, filename), "%s/tmp/%s_%s" % (args.output_dir,i, filename)]
         subprocess.call(params)
@@ -529,7 +537,7 @@ if args.random > 0:
     params = ["sh", "simulator/copy_highest_score_setting.sh", strategy.get_prefix(args), args.output_dir]
     subprocess.call(params)
 else:
-    walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting)
+    walkforward(args, stocks, optimize_terms, validate_terms, strategy_simulator, combination_setting)
 
 print(utils.timestamp())
 proc_end_time = time.time()
