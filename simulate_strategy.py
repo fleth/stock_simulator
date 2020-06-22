@@ -41,7 +41,6 @@ parser.add_argument("-c", type=int, action="store", default=1, dest="count", hel
 parser.add_argument("-n", "--n_calls", type=int, action="store", default=100, help="simulate n_calls")
 parser.add_argument("-j", "--jobs", type=int, action="store", default=8, dest="jobs", help="実行ジョブ数")
 parser.add_argument("-v", action="store_true", default=False, dest="verbose", help="debug log")
-parser.add_argument("--assets", type=int, action="store", default=None, dest="assets", help="assets")
 parser.add_argument("--commission", type=int, action="store", default=150, dest="commission", help="commission")
 parser.add_argument("--output", action="store_true", default=False, dest="output", help="設定をファイルに出力")
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
@@ -68,10 +67,9 @@ def to_jsonizable(dic):
             jsonizable[k] = v
     return jsonizable
 
-def create_setting(args, assets):
+def create_setting(args):
     setting = strategy.create_simulator_setting(args, args.optimize_count == 0)
     setting.min_data_length = args.validate_term * 10
-    setting.assets = assets
     setting.commission = args.commission
     setting.debug = args.verbose
     return setting
@@ -472,11 +470,7 @@ def update_weights(conditions_index, weights):
 print(utils.timestamp())
 proc_start_time = time.time()
 
-if args.assets is None:
-    assets = Loader.assets()
-    simulate_setting = create_setting(args, assets["assets"])
-else:
-    simulate_setting = create_setting(args, args.assets)
+simulate_setting = create_setting(args)
 
 if args.optimize_count > 0 and not args.ignore_optimize and args.use_optimized_init == 0 and not args.with_weights:
     combination_setting = strategy.create_combination_setting(args, use_json=False)
