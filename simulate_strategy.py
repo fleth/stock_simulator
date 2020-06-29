@@ -416,7 +416,7 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
 
         objective(args, strategy_setting, stocks, params, validate_params, strategy_simulator) # 選ばれた戦略スコアを表示するため
         strategy_settings = strategy_simulator.strategy_settings[:args.use_optimized_init] + [strategy_setting]
-        validate_combination_setting = copy.copy(strategy_simulator.combination_setting)
+        validate_combination_setting = copy.deepcopy(strategy_simulator.combination_setting)
         print(strategy_setting.__dict__, score)
         if score < 0:
             weights = update_weights(conditions_index, default_weights)
