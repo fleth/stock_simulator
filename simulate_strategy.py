@@ -174,7 +174,7 @@ def get_default_score(scores, simulator_setting, strategy_setting):
     ignore = [
         sum(score_stats["gain"]) <= 0, # 損益がマイナス
         sum(score_stats["trade"]) < score_stats["term"] / 2, # 取引数が少ない
-        score_stats["profit_factor"] < 1.5, # プロフィットファクター（総純利益 / 総損失）が1.5以下
+        score_stats["profit_factor"] < 1.1, # プロフィットファクター（総純利益 / 総損失）が1.1以下
     ]
 
     if any(ignore):
@@ -456,11 +456,11 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
 def update_weights(conditions_index, weights):
     for method, indexies in conditions_index.items():
         for index in indexies:
-            i = int(index)
+            i = str(index)
             if not method in weights.keys():
                 weights[method] = {}
 
-            if index in weights[method].keys():
+            if i in weights[method].keys():
                 weights[method][i] = weights[method][i] + 10
             else:
                 weights[method][i] = 10
