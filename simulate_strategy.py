@@ -210,10 +210,10 @@ def simulate_params(stocks, terms, strategy_simulator):
         # term毎にデータを分けてシミュレートした結果の平均をスコアとして返す
         start = utils.to_format_by_term(term["start_date"])
         end = utils.to_format_by_term(term["end_date"])
-        codes, _, _ = strategy_simulator.select_codes(stocks["args"], start, end)
+        codes, _, daterange = strategy_simulator.select_codes(stocks["args"], start, end)
         select = select_data(codes, stocks, start, end)
 
-        params.append((select, utils.to_format(utils.to_datetime(start)), end))
+        params.append((select, utils.to_format(utils.to_datetime(start)), end, daterange))
     return params
 
 # 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
@@ -376,7 +376,7 @@ def validation(args, stocks, terms, strategy_simulator, combination_setting, str
     strategy_simulator.combination_setting = combination_setting
     params = simulate_params(stocks, terms, strategy_simulator)
     for param in params:
-        _, start_date, end_date = param
+        _, start_date, end_date, daterange = param
         result = simulate_by_term((strategy_simulator, strategy_settings[-1]) + param)
 
         if args.apply_compound_interest: # 複利を適用
