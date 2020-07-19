@@ -213,8 +213,7 @@ def simulate_params(stocks, terms, strategy_simulator):
         codes, _, _ = strategy_simulator.select_codes(stocks["args"], start, end)
         select = select_data(codes, stocks, start, end)
 
-        # closingのタイミングの都合で開始と1日重なってしまうので足しておく
-        params.append((select, utils.to_format(utils.to_datetime(start) + utils.relativeterm(1, True)), end))
+        params.append((select, utils.to_format(utils.to_datetime(start)), end))
     return params
 
 # 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
