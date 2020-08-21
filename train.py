@@ -63,8 +63,8 @@ def load(setting, start_date, end_date):
             x = numpy.nan_to_num(x.reshape(shape))
             y = y.iloc[setting.length_of_sequences:]
         else:
-            x = numpy.nan_to_num(x.as_matrix().reshape(shape))
-        y = numpy.nan_to_num(y.as_matrix())
+            x = numpy.nan_to_num(x.values.reshape(shape))
+        y = numpy.nan_to_num(y.values)
         X.extend(x)
         Y.extend(y)
     X = numpy.array(X)
@@ -82,7 +82,7 @@ def to_seq(setting, data):
         else:
             d = data.iloc[i:r-1]
 #        print(i, r, len(d))
-        seq.append(d.as_matrix())
+        seq.append(d.values)
     seq = numpy.array(seq)
     print(seq.shape, setting.batch_input_shape)
     return seq

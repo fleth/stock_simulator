@@ -26,7 +26,7 @@ stock_data = []
 for code in codes:
     data = Loader.load(code, start_date, end_date)
     if data is not None:
-        d = data["close"].as_matrix().tolist()
+        d = data["close"].values.tolist()
         stock_data.append({"code": code, "data": d})
 
 # データ長を揃えたリスト
