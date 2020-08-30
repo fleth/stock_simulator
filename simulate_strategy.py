@@ -346,6 +346,7 @@ def output_setting(args, strategy_settings, strategy_simulator, score, optimize_
             "optimize_report": optimize_report,
             "validate_report": validate_report,
             "use_limit": args.use_limit,
+            "auto_stop_loss": args.auto_stop_loss,
             "performance_score": float(performance_score)
         })))
 
