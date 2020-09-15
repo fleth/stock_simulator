@@ -114,24 +114,24 @@ def load(args, codes, terms, daterange, combination_setting):
     print("loading done")
     return {"data": data, "index": index, "args": args}
 
-def get_score(args, scores, simulator_setting, strategy_setting):
-    score = get_default_score(scores, simulator_setting, strategy_setting)
+def get_score(args, performances, simulator_setting, strategy_setting):
+    score = get_default_score(performances, simulator_setting, strategy_setting)
     return score
 
-def sorted_values(scores, key):
-    sorted_scroes = sorted(scores, key=lambda x:utils.to_datetime(x["start_date"]))
+def sorted_values(performances, key):
+    sorted_scroes = sorted(performances, key=lambda x:utils.to_datetime(x["start_date"]))
     values = list(map(lambda x: x[key], sorted_scroes))
     return values
 
-def get_score_stats(scores):
-    term = len(scores)
-    gain = list(map(lambda x: x["gain"], scores))
+def get_score_stats(performances):
+    term = len(performances)
+    gain = list(map(lambda x: x["gain"], performances))
     win = list(filter(lambda x: x > 0, gain))
     lose = list(filter(lambda x: x < 0, gain))
-    drawdown = list(map(lambda x: x["drawdown"], scores))
-    max_drawdown = list(map(lambda x: x["max_drawdown"], scores))
-    trade = list(map(lambda x: x["trade"], scores))
-    win_trade = list(map(lambda x: x["win_trade"], scores))
+    drawdown = list(map(lambda x: x["drawdown"], performances))
+    max_drawdown = list(map(lambda x: x["max_drawdown"], performances))
+    trade = list(map(lambda x: x["trade"], performances))
+    win_trade = list(map(lambda x: x["win_trade"], performances))
     profit_factor = sum(win) / abs(sum(lose)) if abs(sum(lose)) > 0 else 1
     gain_per_trade = sum(gain) / sum(trade) if sum(trade) > 0 else 0
 
@@ -165,11 +165,11 @@ def print_score_stats(name, score, score_stats, assets, strategy_setting):
         f.write(json.dumps(to_jsonizable(setting)))
         f.write("\n")
 
-def get_default_score(scores, simulator_setting, strategy_setting):
-    if len(scores) == 0:
+def get_default_score(performances, simulator_setting, strategy_setting):
+    if len(performances) == 0:
         return 0
 
-    score_stats = get_score_stats(scores)
+    score_stats = get_score_stats(performances)
 
     ignore = [
         sum(score_stats["gain"]) <= 0, # 損益がマイナス
@@ -220,13 +220,13 @@ def simulate_params(stocks, terms, strategy_simulator):
 def simulate_by_multiple_term(stocks, params):
     try:
         p = Pool(int(stocks["args"].jobs))
-        scores = p.map(simulate_by_term, params)
+        performances = p.map(simulate_by_term, params)
     except KeyboardInterrupt:
         p.close()
         exit()
     finally:
         p.close()
-    return scores
+    return performances
 
 # パラメータ評価用の関数
 # 指定戦略を全銘柄に対して最適化
@@ -234,12 +234,12 @@ def objective(args, strategy_setting, stocks, params, validate_params, strategy_
     print(strategy_setting.__dict__, strategy_simulator.combination_setting.seed)
     try:
         params = list(map(lambda x: (strategy_simulator, strategy_setting) + x, params))
-        scores = simulate_by_multiple_term(stocks, params)
-        score = get_score(args, scores, strategy_simulator.simulator_setting, strategy_setting)
+        performances = simulate_by_multiple_term(stocks, params)
+        score = get_score(args, performances, strategy_simulator.simulator_setting, strategy_setting)
         if score > 0:
             validate_params = list(map(lambda x: (strategy_simulator, strategy_setting) + x, validate_params))
-            validate_scores = simulate_by_multiple_term(stocks, validate_params)
-            validate_score = get_score(args, validate_scores, strategy_simulator.simulator_setting, strategy_setting)
+            validate_performances = simulate_by_multiple_term(stocks, validate_params)
+            validate_score = get_score(args, validate_performances, strategy_simulator.simulator_setting, strategy_setting)
             score = score * validate_score
     except Exception as e:
         print("skip objective. %s" % e)
@@ -377,21 +377,30 @@ def validation(args, stocks, terms, strategy_simulator, combination_setting, str
     strategy_simulator.strategy_settings = strategy_settings
     strategy_simulator.combination_setting = combination_setting
     params = simulate_params(stocks, terms, strategy_simulator)
-    for param in params:
-        _, start_date, end_date, daterange = param
-        result = simulate_by_term((strategy_simulator, strategy_settings[-1]) + param)
+    simulator_setting = copy.deepcopy(strategy_simulator.simulator_setting)
 
-        if args.apply_compound_interest: # 複利を適用
-            strategy_simulator.simulator_setting.assets += result["gain"]
-            print("assets:", strategy_simulator.simulator_setting.assets, result["gain"])
+    if args.verbose or args.apply_compound_interest:
+        print("debug mode")
+        for param in params:
+            _, start_date, end_date, daterange = param
+            result = simulate_by_term((strategy_simulator, strategy_settings[-1]) + param)
 
-        performances[utils.to_format(utils.to_datetime_by_term(end_date))] = result
+            if args.apply_compound_interest: # 複利を適用
+                strategy_simulator.simulator_setting.assets += result["gain"]
+                print("assets:", strategy_simulator.simulator_setting.assets, result["gain"])
+
+            performances[utils.to_format(utils.to_datetime_by_term(end_date))] = result
+    else:
+        params = list(map(lambda x: (strategy_simulator, strategy_settings[-1]) + x, params))
+        results = simulate_by_multiple_term(stocks, params)
+        for result in results:
+            performances[utils.to_format(utils.to_datetime_by_term(result["end_date"]))] = result
 
     # 検証スコア
     score = -get_score(args, performances.values(), strategy_simulator.simulator_setting, strategy_settings[-1])
 
     # 結果の表示 =============================================================================
-    report = create_performance(args, strategy_simulator.simulator_setting, performances)
+    report = create_performance(args, simulator_setting, performances)
 
     return score, report, performances
 
@@ -420,9 +429,10 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
         validate_combination_setting = copy.deepcopy(strategy_simulator.combination_setting)
         print(strategy_setting.__dict__, score)
         if score < 0:
-            weights = update_weights(conditions_index, default_weights)
+            weights = update_weights(conditions_index, default_weights, amount=20)
         else:
-            weights = default_weights
+            weights = update_weights(conditions_index, default_weights, amount=-10)
+            #weights = default_weights
     else:
         _, strategy_settings = strategy.load_strategy_setting(args)
         if args.output:
@@ -454,7 +464,7 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
 
     return weights 
 
-def update_weights(conditions_index, weights):
+def update_weights(conditions_index, weights, amount):
     for method, indexies in conditions_index.items():
         for index in indexies:
             i = str(index)
@@ -462,9 +472,9 @@ def update_weights(conditions_index, weights):
                 weights[method] = {}
 
             if i in weights[method].keys():
-                weights[method][i] = weights[method][i] + 10
+                weights[method][i] = weights[method][i] + amount
             else:
-                weights[method][i] = 10
+                weights[method][i] = amount
     return weights
 
 ######################################################################
@@ -521,7 +531,7 @@ if args.random > 0:
         exit()
 
     if args.with_weights:
-        strategy_simulator.combination_setting.weights = update_weights(strategy_simulator.strategy_creator(args).conditions_index(), combination_setting.weights)
+        strategy_simulator.combination_setting.weights = update_weights(strategy_simulator.strategy_creator(args).conditions_index(), combination_setting.weights, amount=20)
 
     for i in range(args.random):
         combination_setting.weights = walkforward(args, stocks, optimize_terms, validate_terms, strategy_simulator, combination_setting)
