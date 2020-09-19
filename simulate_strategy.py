@@ -115,7 +115,10 @@ def load(args, codes, terms, daterange, combination_setting):
     return {"data": data, "index": index, "args": args}
 
 def get_score(args, performances, simulator_setting, strategy_setting):
-    score = get_default_score(performances, simulator_setting, strategy_setting)
+    if args.short:
+        score = get_short_score(performances, simulator_setting, strategy_setting)
+    else:
+        score = get_default_score(performances, simulator_setting, strategy_setting)
     return score
 
 def sorted_values(performances, key):
@@ -183,6 +186,26 @@ def get_default_score(performances, simulator_setting, strategy_setting):
         score = sum(score_stats["trade"]) * (sum(score_stats["gain"]) / 10000) * (1 - max(score_stats["max_drawdown"]))
 
     print_score_stats("", score, score_stats, simulator_setting.assets, strategy_setting)
+
+    return score
+
+def get_short_score(performances, simulator_setting, strategy_setting):
+    if len(performances) == 0:
+        return 0
+
+    score_stats = get_score_stats(performances)
+
+    ignore = [
+        sum(score_stats["gain"]) <= 0, # 損益がマイナス
+        score_stats["profit_factor"] < 1.1, # プロフィットファクター（総純利益 / 総損失）が1.1以下
+    ]
+
+    if any(ignore):
+        score = 0
+    else:
+        score = sum(score_stats["trade"]) * (sum(score_stats["gain"]) / 10000) * (1 - max(score_stats["max_drawdown"]))
+
+    print_score_stats("short", score, score_stats, simulator_setting.assets, strategy_setting)
 
     return score
 
