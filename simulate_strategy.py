@@ -429,7 +429,8 @@ def validation(args, stocks, terms, strategy_simulator, combination_setting, str
 
 def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combination_setting):
     default_weights = copy.deepcopy(combination_setting.weights)
-    print("weights", default_weights)
+    if args.verbose:
+        print("weights", default_weights)
 
     is_optimize = args.optimize_count > 0 and not args.ignore_optimize
 
