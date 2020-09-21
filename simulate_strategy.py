@@ -322,7 +322,7 @@ def create_performance(args, simulator_setting, performances):
 
     # 簡易レポート
     for date, performance in sorted(performances.items(), key=lambda x: utils.to_datetime(x[0])):
-        pickup = ["gain", "trade", "win_trade", "max_drawdown", "max_unavailable_assets", "auto_stop_loss"]
+        pickup = ["gain", "min_assets", "trade", "win_trade", "max_drawdown", "max_unavailable_assets", "auto_stop_loss"]
         stats = list(map(lambda x: "%s: %s" % (x, performance[x]), pickup))
         print(date, ",\t".join(stats))
 
