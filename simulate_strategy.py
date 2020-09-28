@@ -41,7 +41,6 @@ parser.add_argument("-c", type=int, action="store", default=1, dest="count", hel
 parser.add_argument("-n", "--n_calls", type=int, action="store", default=100, help="simulate n_calls")
 parser.add_argument("-j", "--jobs", type=int, action="store", default=8, dest="jobs", help="実行ジョブ数")
 parser.add_argument("-v", action="store_true", default=False, dest="verbose", help="debug log")
-parser.add_argument("--commission", type=int, action="store", default=150, dest="commission", help="commission")
 parser.add_argument("--output", action="store_true", default=False, dest="output", help="設定をファイルに出力")
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
 parser.add_argument("--skip_optimized", action="store_true", default=False, dest="skip_optimized", help="最適化済みなら最適化をスキップ")
@@ -52,6 +51,7 @@ parser.add_argument("--apply_compound_interest", action="store_true", default=Fa
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser.add_argument("--performance", action="store_true", default=False, dest="performance", help="パフォーマンスレポートを出力する")
 parser.add_argument("--with_weights", action="store_true", default=False, dest="with_weights", help="重みを引き継ぐ")
+parser.add_argument("--instant", action="store_true", default=False, dest="instant", help="日次トレード")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
 
@@ -70,7 +70,6 @@ def to_jsonizable(dic):
 def create_setting(args):
     setting = strategy.create_simulator_setting(args, args.optimize_count == 0)
     setting.min_data_length = args.validate_term * 10
-    setting.commission = args.commission
     setting.debug = args.verbose
     return setting
 
@@ -93,7 +92,7 @@ def load(args, codes, terms, daterange, combination_setting):
 
 #    print("loading %s %s %s" % (len(codes), start_date, end_date))
     data = {}
-    params = list(map(lambda x: {"code": x, "start_date": utils.to_format(daterange[x][0]), "end_date": utils.to_format(daterange[x][-1]), "args": args}, codes))
+    params = list(map(lambda x: {"code": x, "start_date": utils.to_format(daterange[x][0]), "end_date": end_date, "args": args}, codes))
 
     try:
         p = Pool(8)
@@ -221,7 +220,7 @@ def select_data(codes, stocks, start, end):
     for code in codes:
         if not code in stocks["data"].keys():
             continue
-        start_date = utils.to_format(utils.to_datetime_by_term(start) - utils.relativeterm(1))
+        start_date = utils.to_format(utils.to_datetime(start) - utils.relativeterm(1))
         select["data"][code] = stocks["data"][code].split(start_date, end)
 
     return select
@@ -231,9 +230,14 @@ def simulate_params(stocks, terms, strategy_simulator):
     strategy_simulator.simulator_setting.strategy = None
     for term in terms:
         # term毎にデータを分けてシミュレートした結果の平均をスコアとして返す
-        start = utils.to_format_by_term(term["start_date"])
-        end = utils.to_format_by_term(term["end_date"])
-        codes, _, daterange = strategy_simulator.select_codes(stocks["args"], start, end)
+        start = utils.to_format(term["start_date"])
+        end = utils.to_format(term["end_date"])
+        if args.instant:
+            codes = strategy_simulator.get_targets(stocks["args"], [], start)
+            daterange = strategy_simulator.append_daterange(codes, utils.to_datetime(start), {})
+            daterange = strategy_simulator.append_daterange(codes, utils.to_datetime(end), daterange)
+        else:
+            codes, _, daterange = strategy_simulator.select_codes(stocks["args"], start, end)
         select = select_data(codes, stocks, start, end)
 
         params.append((select, utils.to_format(utils.to_datetime(start)), end, daterange))
@@ -293,8 +297,9 @@ def create_terms(args):
 
     valid_end_date = utils.to_datetime(args.date)
     for c in range(args.count):
-        end_date = valid_end_date - utils.relativeterm(args.validate_term)
-        start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count)
+        end_date = utils.select_weekday(valid_end_date - utils.relativeterm(args.validate_term, with_time=args.instant))
+        start_date = utils.select_weekday(end_date - utils.relativeterm(args.validate_term*args.optimize_count, with_time=args.instant))
+
         term = {"start_date": start_date, "end_date": end_date}
         validate_term = {"start_date": end_date, "end_date": valid_end_date}
 
