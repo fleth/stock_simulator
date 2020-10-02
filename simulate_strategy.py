@@ -297,8 +297,12 @@ def create_terms(args):
 
     valid_end_date = utils.to_datetime(args.date)
     for c in range(args.count):
-        end_date = utils.select_weekday(valid_end_date - utils.relativeterm(args.validate_term, with_time=args.instant))
-        start_date = utils.select_weekday(end_date - utils.relativeterm(args.validate_term*args.optimize_count, with_time=args.instant))
+        if args.instant:
+            end_date = utils.select_weekday(valid_end_date - utils.relativeterm(args.validate_term, with_time=True))
+            start_date = utils.select_weekday(end_date - utils.relativeterm(args.validate_term*args.optimize_count, with_time=True))
+        else:
+            end_date = valid_end_date - utils.relativeterm(args.validate_term)
+            start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count)
 
         term = {"start_date": start_date, "end_date": end_date}
         validate_term = {"start_date": end_date, "end_date": valid_end_date}
