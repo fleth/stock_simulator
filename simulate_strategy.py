@@ -51,7 +51,6 @@ parser.add_argument("--apply_compound_interest", action="store_true", default=Fa
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser.add_argument("--performance", action="store_true", default=False, dest="performance", help="パフォーマンスレポートを出力する")
 parser.add_argument("--with_weights", action="store_true", default=False, dest="with_weights", help="重みを引き継ぐ")
-parser.add_argument("--instant", action="store_true", default=False, dest="instant", help="日次トレード")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
 
