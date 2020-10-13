@@ -21,6 +21,10 @@ from loader import Loader, Bitcoin
 from simulator import Simulator, SimulatorSetting, SimulatorData
 from strategy_simulator import StrategySimulator
 
+# /skopt/learning/gaussian_process/gpr.py:294: FutureWarning: Beginning in version 0.22, arrays of bytes/strings will be converted to decimal numbers if dtype='numeric'. It is recommended that you convert the array to a float dtype before using it in scikit-learn, for example by using your_array = your_array.astype(np.float64).
+import warnings
+warnings.simplefilter('ignore', FutureWarning)
+
 ###
 # 2018-01-01 ~ 2018-10-10 までを1ヶ月毎評価で最適化する(--outputを指定すると設定出力)
 # - python simulator/simulate_strategy.py 2018-10-01 1 -o 10 [--output]
@@ -236,7 +240,7 @@ def simulate_params(stocks, terms, strategy_simulator):
             daterange = strategy_simulator.append_daterange(codes, utils.to_datetime(start), {})
             daterange = strategy_simulator.append_daterange(codes, utils.to_datetime(end), daterange)
         else:
-            codes, _, daterange = strategy_simulator.select_codes(stocks["args"], start, end)
+            codes, daterange = strategy_simulator.select_codes(stocks["args"], start, end)
         select = select_data(codes, stocks, start, end)
 
         params.append((select, utils.to_format(utils.to_datetime(start)), end, daterange))
@@ -536,11 +540,11 @@ min_start_date = min(list(map(lambda x: x["start_date"], optimize_terms + valida
 start = utils.to_format_by_term(min_start_date)
 end = utils.to_datetime(args.date)
 end = utils.to_format_by_term(end)
-codes, validate_codes, daterange = strategy_simulator.select_codes(args, start, end)
+codes, daterange = strategy_simulator.select_codes(args, start, end)
 
 print("target : %s" % codes, start, end)
 
-stocks = load(args, list(set(codes + validate_codes)), optimize_terms + validate_terms, daterange, combination_setting)
+stocks = load(args, list(set(codes)), optimize_terms + validate_terms, daterange, combination_setting)
 
 # 結果ログを削除
 params = ["rm", "-rf", "settings/simulate.log"]
