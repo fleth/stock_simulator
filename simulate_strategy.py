@@ -72,7 +72,6 @@ def to_jsonizable(dic):
 
 def create_setting(args):
     setting = strategy.create_simulator_setting(args, args.optimize_count == 0)
-    setting.min_data_length = args.validate_term * 10
     setting.debug = args.verbose
     return setting
 
@@ -86,16 +85,16 @@ def create_simulator_data(param):
 
     return data
 
-def load(args, codes, terms, daterange, combination_setting):
+def load(args, codes, terms, combination_setting):
     min_start_date = min(list(map(lambda x: x["start_date"], terms)))
     prepare_term = utils.relativeterm(args.validate_term)
     start_date = utils.to_format(min_start_date - prepare_term)
     end_date = utils.format(args.date)
     strategy_creator = strategy.load_strategy_creator(args, combination_setting)
 
-#    print("loading %s %s %s" % (len(codes), start_date, end_date))
+    print("loading %s %s %s" % (len(codes), start_date, end_date))
     data = {}
-    params = list(map(lambda x: {"code": x, "start_date": utils.to_format(daterange[x][0]), "end_date": end_date, "args": args}, codes))
+    params = list(map(lambda x: {"code": x, "start_date": start_date, "end_date": end_date, "args": args}, codes))
 
     try:
         p = Pool(8)
@@ -215,6 +214,19 @@ def simulate_by_term(param):
     strategy_simulator = param[0]
     return strategy_simulator.simulates(*param[1:])
 
+def select_codes(args, start, end, strategy_simulator):
+    codes = strategy_simulator.select_codes(args, start, end)
+    return codes
+
+def target_codes(args, terms, strategy_simulator):
+    codes = []
+    for term in terms:
+        start = utils.to_format(term["start_date"])
+        end = utils.to_format(term["end_date"])
+        targets = select_codes(args, start, end, strategy_simulator)
+        codes = list(set(codes + targets))
+    return codes
+
 def select_data(codes, stocks, start, end):
     select = {"data": {}, "index": stocks["index"], "args": stocks["args"]}
 
@@ -223,8 +235,9 @@ def select_data(codes, stocks, start, end):
     for code in codes:
         if not code in stocks["data"].keys():
             continue
-        start_date = utils.to_format(utils.to_datetime(start) - utils.relativeterm(1))
+        start_date = utils.to_format(utils.to_datetime(start) - utils.relativeterm(3))
         select["data"][code] = stocks["data"][code].split(start_date, end)
+#        print(select["data"][code].daily["date"].astype(str).values)
 
     return select
 
@@ -232,18 +245,11 @@ def simulate_params(stocks, terms, strategy_simulator):
     params = []
     strategy_simulator.simulator_setting.strategy = None
     for term in terms:
-        # term毎にデータを分けてシミュレートした結果の平均をスコアとして返す
         start = utils.to_format(term["start_date"])
         end = utils.to_format(term["end_date"])
-        if args.instant:
-            codes = strategy_simulator.get_targets(stocks["args"], [], start)
-            daterange = strategy_simulator.append_daterange(codes, utils.to_datetime(start), {})
-            daterange = strategy_simulator.append_daterange(codes, utils.to_datetime(end), daterange)
-        else:
-            codes, daterange = strategy_simulator.select_codes(stocks["args"], start, end)
+        codes = select_codes(stocks["args"], start, end, strategy_simulator)
         select = select_data(codes, stocks, start, end)
-
-        params.append((select, utils.to_format(utils.to_datetime(start)), end, daterange))
+        params.append((select, utils.to_format(utils.to_datetime(start)), end))
     return params
 
 # 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
@@ -420,7 +426,7 @@ def validation(args, stocks, terms, strategy_simulator, combination_setting, str
     if args.verbose or args.apply_compound_interest:
         print("debug mode")
         for param in params:
-            _, start_date, end_date, daterange = param
+            _, start_date, end_date = param
             result = simulate_by_term((strategy_simulator, strategy_settings[-1]) + param)
 
             if args.apply_compound_interest: # 複利を適用
@@ -540,11 +546,11 @@ min_start_date = min(list(map(lambda x: x["start_date"], optimize_terms + valida
 start = utils.to_format_by_term(min_start_date)
 end = utils.to_datetime(args.date)
 end = utils.to_format_by_term(end)
-codes, daterange = strategy_simulator.select_codes(args, start, end)
+codes = target_codes(args, optimize_terms + validate_terms, strategy_simulator)
 
 print("target : %s" % codes, start, end)
 
-stocks = load(args, list(set(codes)), optimize_terms + validate_terms, daterange, combination_setting)
+stocks = load(args, list(set(codes)), optimize_terms + validate_terms, combination_setting)
 
 # 結果ログを削除
 params = ["rm", "-rf", "settings/simulate.log"]
