@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+import math
 import pandas
 import json
 import time
@@ -55,6 +56,7 @@ parser.add_argument("--apply_compound_interest", action="store_true", default=Fa
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser.add_argument("--performance", action="store_true", default=False, dest="performance", help="パフォーマンスレポートを出力する")
 parser.add_argument("--with_weights", action="store_true", default=False, dest="with_weights", help="重みを引き継ぐ")
+parser.add_argument("--amount", type=int, action="store", default=100, dest="amount", help="重みの増加量")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
 
@@ -118,6 +120,8 @@ def load(args, codes, terms, combination_setting):
 def get_score(args, performances, simulator_setting, strategy_setting):
     if args.short:
         score = get_short_score(performances, simulator_setting, strategy_setting)
+    elif args.instant:
+        score = get_instant_score(performances, simulator_setting, strategy_setting)
     else:
         score = get_default_score(performances, simulator_setting, strategy_setting)
     return score
@@ -178,7 +182,7 @@ def get_default_score(performances, simulator_setting, strategy_setting):
     ignore = [
         sum(score_stats["gain"]) <= 0, # 損益がマイナス
         sum(score_stats["trade"]) < score_stats["term"] / 2, # 取引数が少ない
-        score_stats["profit_factor"] < 1.1, # プロフィットファクター（総純利益 / 総損失）が1.1以下
+        score_stats["profit_factor"] < 1.0, # プロフィットファクター（総純利益 / 総損失）が1.1以下
     ]
 
     if any(ignore):
@@ -187,6 +191,27 @@ def get_default_score(performances, simulator_setting, strategy_setting):
         score = sum(score_stats["trade"]) * (sum(score_stats["gain"]) / 10000) * (1 - max(score_stats["max_drawdown"]))
 
     print_score_stats("", score, score_stats, simulator_setting.assets, strategy_setting)
+
+    return score
+
+def get_instant_score(performances, simulator_setting, strategy_setting):
+    if len(performances) == 0:
+        return 0
+
+    score_stats = get_score_stats(performances)
+
+    ignore = [
+        sum(score_stats["gain"]) <= 0, # 損益がマイナス
+        sum(score_stats["trade"]) < score_stats["term"] / 2, # 取引数が少ない
+        score_stats["profit_factor"] < 1.0, # プロフィットファクター（総純利益 / 総損失）が1.1以下
+    ]
+
+    if any(ignore):
+        score = 0
+    else:
+        score = (sum(score_stats["win_trade"]) / sum(score_stats["trade"])) * (sum(score_stats["gain"]) / 10000) * (1 - max(score_stats["max_drawdown"]))
+
+    print_score_stats("instant", score, score_stats, simulator_setting.assets, strategy_setting)
 
     return score
 
@@ -473,11 +498,7 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
         strategy_settings = strategy_simulator.strategy_settings[:args.use_optimized_init] + [strategy_setting]
         validate_combination_setting = copy.deepcopy(strategy_simulator.combination_setting)
         print(strategy_setting.__dict__, score)
-        if score < 0:
-            weights = update_weights(conditions_index, default_weights, amount=20)
-        else:
-            weights = update_weights(conditions_index, default_weights, amount=-10)
-            #weights = default_weights
+        weights = update_weights(conditions_index, default_weights, score, amount=args.amount)
     else:
         _, strategy_settings = strategy.load_strategy_setting(args)
         if args.output:
@@ -509,17 +530,25 @@ def walkforward(args, stocks, terms, validate_terms, strategy_simulator, combina
 
     return weights 
 
-def update_weights(conditions_index, weights, amount):
+def update_weights(conditions_index, weights, score, amount):
     for method, indexies in conditions_index.items():
+        if not method in weights.keys():
+            weights[method] = {}
         for index in indexies:
             i = str(index)
-            if not method in weights.keys():
-                weights[method] = {}
-
             if i in weights[method].keys():
-                weights[method][i] = weights[method][i] + amount
+                if score < 0:
+                    weights[method][i] = weights[method][i] + amount
+                else:
+                    if weights[method][i] > 0:
+                        weights[method][i] = math.ceil(weights[method][i] / 2)
+                    else:
+                        weights[method][i] = math.ceil(weights[method][i] * 2)
             else:
-                weights[method][i] = amount
+                if score < 0:
+                    weights[method][i] = amount
+                else:
+                    weights[method][i] = -math.ceil(amount / 10)
     return weights
 
 ######################################################################
@@ -576,7 +605,7 @@ if args.random > 0:
         exit()
 
     if args.with_weights:
-        strategy_simulator.combination_setting.weights = update_weights(strategy_simulator.strategy_creator(args).conditions_index(), combination_setting.weights, amount=20)
+        strategy_simulator.combination_setting.weights = update_weights(strategy_simulator.strategy_creator(args).conditions_index(), combination_setting.weights, score=-1, amount=args.amount)
 
     for i in range(args.random):
         combination_setting.weights = walkforward(args, stocks, optimize_terms, validate_terms, strategy_simulator, combination_setting)
