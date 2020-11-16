@@ -338,8 +338,8 @@ def create_terms(args):
             end_date = valid_end_date - utils.relativeterm(args.validate_term)
             start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count)
 
-        term = {"start_date": start_date, "end_date": end_date}
-        validate_term = {"start_date": end_date, "end_date": valid_end_date}
+        term = {"start_date": start_date, "end_date": end_date - utils.relativeterm(1, with_time=True)}
+        validate_term = {"start_date": end_date, "end_date": valid_end_date - utils.relativeterm(1, with_time=True)}
 
         if args.optimize_count > 0:
             optimize_terms.append(term)
@@ -412,6 +412,7 @@ def output_setting(args, strategy_settings, strategy_simulator, score, optimize_
             "setting": list(map(lambda x: x.__dict__, strategy_settings)),
             "seed": strategy_simulator.combination_setting.seed,
             "weights": strategy_simulator.combination_setting.weights,
+            "condition_size": strategy_simulator.combination_setting.condition_size,
             "optimize_report": optimize_report,
             "validate_report": validate_report,
             "use_limit": args.use_limit,
