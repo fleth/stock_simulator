@@ -202,7 +202,7 @@ def get_instant_score(performances, simulator_setting, strategy_setting):
 
     ignore = [
         sum(score_stats["gain"]) <= 0, # 損益がマイナス
-        sum(score_stats["trade"]) < score_stats["term"] / 2, # 取引数が少ない
+#        sum(score_stats["trade"]) < score_stats["term"] / 2, # 取引数が少ない
         score_stats["profit_factor"] < 1.0, # プロフィットファクター（総純利益 / 総損失）が1.1以下
     ]
 
@@ -335,11 +335,11 @@ def create_terms(args):
             end_date = utils.select_weekday(valid_end_date - utils.relativeterm(args.validate_term, with_time=True))
             start_date = utils.select_weekday(end_date - utils.relativeterm(args.validate_term*args.optimize_count, with_time=True))
         else:
-            end_date = valid_end_date - utils.relativeterm(args.validate_term)
-            start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count)
+            end_date = valid_end_date - utils.relativeterm(args.validate_term) - utils.relativeterm(1, with_time=True)
+            start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count) - utils.relativeterm(1, with_time=True)
 
-        term = {"start_date": start_date, "end_date": end_date - utils.relativeterm(1, with_time=True)}
-        validate_term = {"start_date": end_date, "end_date": valid_end_date - utils.relativeterm(1, with_time=True)}
+        term = {"start_date": start_date, "end_date": end_date}
+        validate_term = {"start_date": end_date, "end_date": valid_end_date}
 
         if args.optimize_count > 0:
             optimize_terms.append(term)
