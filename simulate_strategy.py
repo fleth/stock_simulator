@@ -332,14 +332,14 @@ def create_terms(args):
     valid_end_date = utils.to_datetime(args.date)
     for c in range(args.count):
         if args.instant:
-            end_date = utils.select_weekday(valid_end_date - utils.relativeterm(args.validate_term, with_time=True))
-            start_date = utils.select_weekday(end_date - utils.relativeterm(args.validate_term*args.optimize_count, with_time=True))
+            end_date = valid_end_date - utils.relativeterm(args.validate_term, with_time=True)
+            start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count, with_time=True)
         else:
-            end_date = valid_end_date - utils.relativeterm(args.validate_term) - utils.relativeterm(1, with_time=True)
-            start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count) - utils.relativeterm(1, with_time=True)
+            end_date = valid_end_date - utils.relativeterm(args.validate_term)
+            start_date = end_date - utils.relativeterm(args.validate_term*args.optimize_count)
 
-        term = {"start_date": start_date, "end_date": end_date}
-        validate_term = {"start_date": end_date, "end_date": valid_end_date}
+        term = {"start_date": start_date, "end_date": end_date - utils.relativeterm(1, with_time=True)}
+        validate_term = {"start_date": end_date, "end_date": valid_end_date - utils.relativeterm(1, with_time=True)}
 
         if args.optimize_count > 0:
             optimize_terms.append(term)
@@ -365,8 +365,8 @@ def create_performance(args, simulator_setting, performances):
 
     # 簡易レポート
     for date, performance in sorted(performances.items(), key=lambda x: utils.to_datetime(x[0])):
-        pickup = ["gain", "interest", "commission", "min_assets", "trade", "win_trade", "max_drawdown", "max_unavailable_assets"]
-        stats = list(map(lambda x: "%s: %s" % (x, performance[x]), pickup))
+        pickup = ["gain", "interest", "commission", "trade", "win_trade", "drawdown", "max_drawdown", "max_unavailable_assets", "auto_stop_loss"]
+        stats = list(map(lambda x: "%s: %.02f" % (x, performance[x]), pickup))
         print(date, ",\t".join(stats))
 
     gain = sum(list(map(lambda x: x["gain"], performances.values())))
