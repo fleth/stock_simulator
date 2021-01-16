@@ -236,8 +236,9 @@ def get_short_score(performances, simulator_setting, strategy_setting):
     return score
 
 def simulate_by_term(param):
-    strategy_simulator = param[0]
-    return strategy_simulator.simulates(*param[1:])
+    strategy_simulator, strategy_setting, data, start_date, end_date = param
+    simulators = strategy_simulator.simulates(strategy_setting, data, start_date, end_date)
+    return strategy_simulator.get_stats(simulators, start_date, end_date)
 
 def select_codes(args, start, end, strategy_simulator):
     codes = strategy_simulator.select_codes(args, start, end)
