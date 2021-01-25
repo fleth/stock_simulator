@@ -38,6 +38,8 @@ warnings.simplefilter('ignore', FutureWarning)
 # ['2017-11-30 00:00:00 - 2018-09-30 00:00:00', '2016-12-30 00:00:00 - 2017-10-30 00:00:00'] 最適化期間
 # ['2018-09-30 00:00:00 - 2018-10-30 00:00:00', '2017-10-30 00:00:00 - 2017-11-30 00:00:00'] 検証期間
 ###
+
+default_output_dir = "simulate_settings"
 parser = ArgumentParser()
 parser.add_argument("date", type=str)
 parser.add_argument("validate_term", type=int) # 最適化期間の10~20%
@@ -51,7 +53,7 @@ parser.add_argument("--random", type=int, action="store", default=0, dest="rando
 parser.add_argument("--skip_optimized", action="store_true", default=False, dest="skip_optimized", help="最適化済みなら最適化をスキップ")
 parser.add_argument("--ignore_optimize", action="store_true", default=False, dest="ignore_optimize", help="最適化を実施しない")
 parser.add_argument("--use_optimized_init", type=int, action="store", default=0, dest="use_optimized_init", help="どこまで初期値に最適化後の設定を使うか")
-parser.add_argument("--output_dir", type=str, action="store", default="simulate_settings", dest="output_dir", help="")
+parser.add_argument("--output_dir", type=str, action="store", default=default_output_dir, dest="output_dir", help="")
 parser.add_argument("--apply_compound_interest", action="store_true", default=False, dest="apply_compound_interest", help="複利を適用")
 parser.add_argument("--montecarlo", action="store_true", default=False, dest="montecarlo", help="ランダム取引")
 parser.add_argument("--performance", action="store_true", default=False, dest="performance", help="パフォーマンスレポートを出力する")
@@ -298,11 +300,16 @@ def objective(args, strategy_setting, stocks, params, validate_params, strategy_
         params = list(map(lambda x: (strategy_simulator, strategy_setting) + x, params))
         performances = simulate_by_multiple_term(stocks, params)
         score = get_score(args, performances, strategy_simulator.simulator_setting, strategy_setting)
+        validate_score = 0
         if score > 0:
             validate_params = list(map(lambda x: (strategy_simulator, strategy_setting) + x, validate_params))
             validate_performances = simulate_by_multiple_term(stocks, validate_params)
             validate_score = get_score(args, validate_performances, strategy_simulator.simulator_setting, strategy_setting)
+
+        if validate_score > 0:
             score = score * validate_score
+        else:
+            score = score + validate_score
     except Exception as e:
         print("skip objective. %s" % e)
         import traceback
@@ -316,11 +323,11 @@ def strategy_optimize(args, stocks, params, validate_params, strategy_simulator)
 
     # 現在の期間で最適な戦略を選択
     space = strategy_simulator.strategy_creator(args).ranges()
-    n_random_starts = int(args.n_calls/10) if args.random > 0 else 10
+    n_random_starts = int(args.n_calls/4) if args.n_calls > 100 else 10
     random_state = int(time.time()) if args.random > 0 else None
     res_gp = gp_minimize(
         lambda x: objective(args, strategy_setting.by_array(x), stocks, params, validate_params, strategy_simulator),
-        space, n_calls=args.n_calls, n_random_starts=n_random_starts, random_state=random_state)
+        space, n_calls=args.n_calls, n_initial_points=n_random_starts, random_state=random_state)
     result = strategy_setting.by_array(res_gp.x)
     score = res_gp.fun
     print("done strategy_optimize: %s random_state:%s" % (utils.timestamp(), random_state))
@@ -599,7 +606,7 @@ if args.random > 0:
     subprocess.call(params)
 
     filename = strategy.get_filename(args)
-    params = ["cp", "%s/%s" % (args.output_dir, filename), "%s/tmp/default_%s" % (args.output_dir, filename)]
+    params = ["cp", "%s/%s" % (default_output_dir, filename), "%s/tmp/default_%s" % (args.output_dir, filename)]
     status = subprocess.call(params)
 
     if status == 0 and args.skip_optimized:
