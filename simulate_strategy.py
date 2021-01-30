@@ -419,12 +419,13 @@ def output_setting(args, strategy_settings, strategy_simulator, score, optimize_
             "min_unit": strategy_simulator.simulator_setting.min_unit,
             "setting": list(map(lambda x: x.__dict__, strategy_settings)),
             "seed": strategy_simulator.combination_setting.seed,
-            "weights": strategy_simulator.combination_setting.weights,
-            "condition_size": strategy_simulator.combination_setting.condition_size,
-            "optimize_report": optimize_report,
-            "validate_report": validate_report,
             "use_limit": args.use_limit,
             "auto_stop_loss": args.auto_stop_loss,
+            "condition_size": strategy_simulator.combination_setting.condition_size,
+            "ensemble_dir": args.ensemble_dir,
+            "weights": strategy_simulator.combination_setting.weights,
+            "optimize_report": optimize_report,
+            "validate_report": validate_report,
             "performance_score": float(performance_score)
         })))
 
