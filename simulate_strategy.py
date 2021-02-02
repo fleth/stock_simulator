@@ -59,6 +59,7 @@ parser.add_argument("--montecarlo", action="store_true", default=False, dest="mo
 parser.add_argument("--performance", action="store_true", default=False, dest="performance", help="パフォーマンスレポートを出力する")
 parser.add_argument("--with_weights", action="store_true", default=False, dest="with_weights", help="重みを引き継ぐ")
 parser.add_argument("--amount", type=int, action="store", default=100, dest="amount", help="重みの増加量")
+parser.add_argument("--ignore_default", action="store_true", default=False, dest="ignore_default", help="ignore_default")
 parser = strategy.add_options(parser)
 args = parser.parse_args()
 
@@ -144,6 +145,7 @@ def get_score_stats(performances):
     win_trade = list(map(lambda x: x["win_trade"], performances))
     profit_factor = sum(win) / abs(sum(lose)) if abs(sum(lose)) > 0 else 1
     gain_per_trade = sum(gain) / sum(trade) if sum(trade) > 0 else 0
+    crash = list(map(lambda x: x["crash"], performances))
 
     return {
         "term": term,
@@ -153,6 +155,7 @@ def get_score_stats(performances):
         "drawdown": drawdown,
         "max_drawdown": max_drawdown,
         "profit_factor": profit_factor,
+        "crash": crash,
         "gain_per_trade": gain_per_trade,
         "trade": trade,
         "win_trade": win_trade,
@@ -191,6 +194,8 @@ def get_default_score(performances, simulator_setting, strategy_setting):
         score = 0
     else:
         score = sum(score_stats["trade"]) * (sum(score_stats["gain"]) / 10000) * (1 - max(score_stats["max_drawdown"]))
+        score = score * (score_stats["gain_per_trade"] / 10000)
+        score = score * (1 - abs(min(score_stats["crash"])) / simulator_setting.assets)
 
     print_score_stats("", score, score_stats, simulator_setting.assets, strategy_setting)
 
@@ -373,7 +378,7 @@ def create_performance(args, simulator_setting, performances):
 
     # 簡易レポート
     for date, performance in sorted(performances.items(), key=lambda x: utils.to_datetime(x[0])):
-        pickup = ["gain", "max_unrealized_gain", "drawdown", "max_drawdown", "max_unavailable_assets", "auto_stop_loss"]
+        pickup = ["gain", "max_unrealized_gain", "crash", "drawdown", "max_drawdown", "auto_stop_loss"]
         stats = list(map(lambda x: "%s: %.02f" % (x, performance[x]), pickup))
         print(date, ",\t".join(stats))
 
@@ -422,6 +427,7 @@ def output_setting(args, strategy_settings, strategy_simulator, score, optimize_
             "use_limit": args.use_limit,
             "auto_stop_loss": args.auto_stop_loss,
             "condition_size": strategy_simulator.combination_setting.condition_size,
+            "passive_leverage": args.passive_leverage,
             "ensemble_dir": args.ensemble_dir,
             "weights": strategy_simulator.combination_setting.weights,
             "optimize_report": optimize_report,
@@ -606,9 +612,10 @@ if args.random > 0:
     params = ["mkdir", "%s/tmp" % args.output_dir]
     subprocess.call(params)
 
-    filename = strategy.get_filename(args)
-    params = ["cp", "%s/%s" % (default_output_dir, filename), "%s/tmp/default_%s" % (args.output_dir, filename)]
-    status = subprocess.call(params)
+    if not args.ignore_default:
+        filename = strategy.get_filename(args)
+        params = ["cp", "%s/%s" % (default_output_dir, filename), "%s/tmp/default_%s" % (args.output_dir, filename)]
+        status = subprocess.call(params)
 
     if status == 0 and args.skip_optimized:
         print("skip. optimized.")

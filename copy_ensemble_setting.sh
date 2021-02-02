@@ -14,7 +14,7 @@ active=`ls $setting_dir/*/active/${prefix}simulate_setting.json | xargs -IXX sh 
 
 files=`echo $passive $active | xargs -n 1`
 
-index=0
+index=`ls $output_dir | wc -l`
 for file in $files; do
   echo $file
   cp $file ${output_dir}/${index}_${prefix}simulate_setting.json
