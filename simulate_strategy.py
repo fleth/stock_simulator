@@ -47,7 +47,6 @@ parser.add_argument("-o", type=int, action="store", default=0, dest="optimize_co
 parser.add_argument("-c", type=int, action="store", default=1, dest="count", help="検証期間の数")
 parser.add_argument("-n", "--n_calls", type=int, action="store", default=100, help="simulate n_calls")
 parser.add_argument("-j", "--jobs", type=int, action="store", default=8, dest="jobs", help="実行ジョブ数")
-parser.add_argument("-v", action="store_true", default=False, dest="verbose", help="debug log")
 parser.add_argument("--output", action="store_true", default=False, dest="output", help="設定をファイルに出力")
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
 parser.add_argument("--skip_optimized", action="store_true", default=False, dest="skip_optimized", help="最適化済みなら最適化をスキップ")
