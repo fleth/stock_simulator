@@ -49,7 +49,6 @@ parser.add_argument("-n", "--n_calls", type=int, action="store", default=100, he
 parser.add_argument("-j", "--jobs", type=int, action="store", default=8, dest="jobs", help="実行ジョブ数")
 parser.add_argument("--output", action="store_true", default=False, dest="output", help="設定をファイルに出力")
 parser.add_argument("--random", type=int, action="store", default=0, dest="random", help="ランダム学習の回数")
-parser.add_argument("--skip_optimized", action="store_true", default=False, dest="skip_optimized", help="最適化済みなら最適化をスキップ")
 parser.add_argument("--ignore_optimize", action="store_true", default=False, dest="ignore_optimize", help="最適化を実施しない")
 parser.add_argument("--use_optimized_init", type=int, action="store", default=0, dest="use_optimized_init", help="どこまで初期値に最適化後の設定を使うか")
 parser.add_argument("--output_dir", type=str, action="store", default=default_output_dir, dest="output_dir", help="")
@@ -614,11 +613,7 @@ if args.random > 0:
     if not args.ignore_default:
         filename = strategy.get_filename(args)
         params = ["cp", "%s/%s" % (default_output_dir, filename), "%s/tmp/default_%s" % (args.output_dir, filename)]
-        status = subprocess.call(params)
-
-    if status == 0 and args.skip_optimized:
-        print("skip. optimized.")
-        exit()
+        subprocess.call(params)
 
     if args.with_weights:
         strategy_simulator.combination_setting.weights = update_weights(strategy_simulator.strategy_creator(args).conditions_index(), combination_setting.weights, score=-1, amount=args.amount)
