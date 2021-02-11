@@ -15,33 +15,44 @@ from loader import Loader
 
 
 parser = ArgumentParser()
-parser.add_argument("filename", type=str)
+parser = strategy.add_options(parser)
 args = parser.parse_args()
 
 try:
-    f = open("%s" % args.filename, "r")
+    performace_dir="simulate_settings/performances/"
+    f = open("%s%sperformance.json" % (performace_dir, strategy.get_prefix(args)), "r")
     data = json.load(f)
 except:
     data = None
-
 
 if data is None:
     print("%s is invalid json" % args.filename)
     exit()
 
-sum_gain = sum(list(map(lambda x: x["gain"],data.values()))) # 総利益
-sum_trade = sum(list(map(lambda x: x["trade"],data.values()))) # 総トレード数
-ave_trade = numpy.average(list(map(lambda x: x["trade"],data.values()))) # 平均トレード数
-gain_per_trade = sum_gain / sum_trade # 1トレード当たりの利益
+setting_dict, _ = strategy.load_strategy_setting(args)
 
-average_line = [i*ave_trade * gain_per_trade for i in range(1, len(data)+1)]
+optimize_end_date = setting_dict["date"]
+filtered = list(filter(lambda x: utils.to_datetime(x[0]) < utils.to_datetime(optimize_end_date), data.items()))
+
+sum_gain = sum(list(map(lambda x: x[1]["gain"],filtered))) # 総利益
+sum_trade = sum(list(map(lambda x: x[1]["trade"],filtered))) # 総トレード数
+ave_trade = numpy.average(list(map(lambda x: x[1]["trade"],filtered))) # 平均トレード数
 
 gain = 0
-diff = []
-for ave, d in zip(average_line, sorted(data.items(), key=lambda x:utils.to_datetime(x[0]))):
+gains = []
+for d in sorted(data.items(), key=lambda x:utils.to_datetime(x[0])):
     gain = gain + d[1]["gain"]
-    diff = diff + [abs(ave - gain)]
+    gains = gains + [gain]
+
+min_gain = min(gains)
+gain_per_trade = (sum_gain - (min_gain if min_gain < 0 else -min_gain)) / sum_trade # 1トレード当たりの利益
+
+diff = []
+for i, gain in enumerate(gains):
+    average = (i+1) * ave_trade * gain_per_trade + min_gain
+    diff = diff + [abs(abs(gain) - abs(average))]
 
 score = 1 / sum(diff) 
 
+print(sum(diff))
 print(score)

@@ -140,10 +140,12 @@ def get_score_stats(performances):
     drawdown = list(map(lambda x: x["drawdown"], performances))
     max_drawdown = list(map(lambda x: x["max_drawdown"], performances))
     trade = list(map(lambda x: x["trade"], performances))
+    no_trade = list(filter(lambda x: x == 0, trade))
     win_trade = list(map(lambda x: x["win_trade"], performances))
     profit_factor = sum(win) / abs(sum(lose)) if abs(sum(lose)) > 0 else 1
     gain_per_trade = sum(gain) / sum(trade) if sum(trade) > 0 else 0
     crash = list(map(lambda x: x["crash"], performances))
+
 
     return {
         "term": term,
@@ -157,6 +159,7 @@ def get_score_stats(performances):
         "gain_per_trade": gain_per_trade,
         "trade": trade,
         "win_trade": win_trade,
+        "no_trade": no_trade,
     }
 
 def print_score_stats(name, score, score_stats, assets, strategy_setting):
@@ -191,9 +194,10 @@ def get_default_score(performances, simulator_setting, strategy_setting):
     if any(ignore):
         score = 0
     else:
-        score = sum(score_stats["trade"]) * (sum(score_stats["gain"]) / 10000) * (1 - max(score_stats["max_drawdown"]))
-        score = score * (score_stats["gain_per_trade"] / 10000)
+        score = sum(score_stats["trade"]) * (sum(score_stats["gain"]) / 1000) * (1 - max(score_stats["max_drawdown"]))
+        score = score * (score_stats["gain_per_trade"] / 1000)
         score = score * (1 - abs(min(score_stats["crash"])) / simulator_setting.assets)
+        score = score * (1 / (len(score_stats["no_trade"])+1))
 
     print_score_stats("", score, score_stats, simulator_setting.assets, strategy_setting)
 
@@ -441,15 +445,23 @@ def get_performance_score(optimize_performances, validate_performances):
     sum_gain = sum(list(map(lambda x: x["gain"], performances.values()))) # 総利益
     sum_trade = sum(list(map(lambda x: x["trade"], performances.values()))) # 総トレード数
     ave_trade = numpy.average(list(map(lambda x: x["trade"], performances.values()))) # 平均トレード数
-    gain_per_trade = 0 if sum_trade == 0 else (sum_gain / sum_trade)# 1トレード当たりの利益
-
-    average_line = [i*ave_trade * gain_per_trade for i in range(1, len(performances)+1)]
 
     gain = 0
-    diff = []
-    for ave, d in zip(average_line, sorted(performances.items(), key=lambda x:utils.to_datetime(x[0]))):
+    gains = []
+    for d in sorted(performances.items(), key=lambda x:utils.to_datetime(x[0])):
         gain = gain + d[1]["gain"]
-        diff = diff + [abs(ave - gain)]
+        gains = gains + [gain]
+
+    min_gain = min(gains)
+    if sum_trade == 0:
+        gain_per_trade = 0
+    else:
+        gain_per_trade = (sum_gain - (min_gain if min_gain < 0 else -min_gain)) / sum_trade # 1トレード当たりの利益
+
+    diff = []
+    for i, gain in enumerate(gains):
+        average = (i+1) * ave_trade * gain_per_trade + min_gain
+        diff = diff + [abs(abs(gain) - abs(average))]
 
     score = 0 if sum(diff) == 0 else 1 / sum(diff)
 
@@ -610,8 +622,9 @@ if args.random > 0:
     params = ["mkdir", "%s/tmp" % args.output_dir]
     subprocess.call(params)
 
+    filename = strategy.get_filename(args)
+
     if not args.ignore_default:
-        filename = strategy.get_filename(args)
         params = ["cp", "%s/%s" % (default_output_dir, filename), "%s/tmp/default_%s" % (args.output_dir, filename)]
         subprocess.call(params)
 
