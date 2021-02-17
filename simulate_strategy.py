@@ -194,10 +194,11 @@ def get_default_score(performances, simulator_setting, strategy_setting):
     if any(ignore):
         score = 0
     else:
+        over_drawdown = list(map(lambda x: x > 0.2, score_stats["max_drawdown"]))
         score = sum(score_stats["trade"]) * (sum(score_stats["gain"]) / 1000) * (1 - max(score_stats["max_drawdown"]))
         score = score * (score_stats["gain_per_trade"] / 1000)
         score = score * (1 - abs(min(score_stats["crash"])) / simulator_setting.assets)
-        score = score * (1 / (len(score_stats["no_trade"])+1))
+        score = score * (1 / (len(score_stats["no_trade"]) + len(over_drawdown) + 1))
 
     print_score_stats("", score, score_stats, simulator_setting.assets, strategy_setting)
 
