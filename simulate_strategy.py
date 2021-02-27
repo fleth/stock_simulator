@@ -331,7 +331,7 @@ def strategy_optimize(args, stocks, params, validate_params, strategy_simulator)
 
     # 現在の期間で最適な戦略を選択
     space = strategy_simulator.strategy_creator(args).ranges()
-    n_random_starts = int(args.n_calls/4) if args.n_calls > 100 else 10
+    n_random_starts = int(args.n_calls/4) if args.n_calls >= 100 else 10
     random_state = int(time.time()) if args.random > 0 else None
     res_gp = gp_minimize(
         lambda x: objective(args, strategy_setting.by_array(x), stocks, params, validate_params, strategy_simulator),
