@@ -246,8 +246,8 @@ def get_short_score(performances, simulator_setting, strategy_setting):
     return score
 
 def simulate_by_term(param):
-    strategy_simulator, strategy_setting, data, start_date, end_date = param
-    simulators = strategy_simulator.simulates(strategy_setting, data, start_date, end_date)
+    strategy_simulator, strategy_setting, data, start_date, end_date, ignore_manda = param
+    simulators = strategy_simulator.simulates(strategy_setting, data, start_date, end_date, ignore_manda=ignore_manda)
     return strategy_simulator.get_stats(simulators, start_date, end_date)
 
 def select_codes(args, start, end, strategy_simulator):
@@ -277,7 +277,7 @@ def select_data(codes, stocks, start, end):
 
     return select
 
-def simulate_params(stocks, terms, strategy_simulator):
+def simulate_params(stocks, terms, strategy_simulator, ignore_manda=True):
     params = []
     strategy_simulator.simulator_setting.strategy = None
     for term in terms:
@@ -285,7 +285,7 @@ def simulate_params(stocks, terms, strategy_simulator):
         end = utils.to_format(term["end_date"])
         codes = select_codes(stocks["args"], start, end, strategy_simulator)
         select = select_data(codes, stocks, start, end)
-        params.append((select, utils.to_format(utils.to_datetime(start)), end))
+        params.append((select, utils.to_format(utils.to_datetime(start)), end, ignore_manda))
     return params
 
 # 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
@@ -472,7 +472,7 @@ def validation(args, stocks, terms, strategy_simulator, combination_setting, str
     performances = {}
     strategy_simulator.strategy_settings = strategy_settings
     strategy_simulator.combination_setting = combination_setting
-    params = simulate_params(stocks, terms, strategy_simulator)
+    params = simulate_params(stocks, terms, strategy_simulator, ignore_manda=False)
     simulator_setting = copy.deepcopy(strategy_simulator.simulator_setting)
 
     if args.verbose or args.apply_compound_interest:
