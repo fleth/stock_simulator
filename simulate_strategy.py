@@ -96,6 +96,7 @@ def load(args, codes, terms, combination_setting):
     strategy_creator = strategy.load_strategy_creator(args, combination_setting)
 
     print("loading %s %s %s" % (len(codes), start_date, end_date))
+    index = strategy.load_index(args, start_date, end_date)
     data = {}
     params = list(map(lambda x: {"code": x, "start_date": start_date, "end_date": end_date, "args": args}, codes))
 
@@ -105,15 +106,12 @@ def load(args, codes, terms, combination_setting):
         for r in ret:
             if r is None:
                 continue
-#            print("add_data: ", utils.timestamp(), r.code)
-            data[r.code] = strategy_creator.add_data(r)
+            data[r.code] = r
     except KeyboardInterrupt:
         p.close()
         exit()
     finally:
         p.close()
-
-    index = strategy.load_index(args, start_date, end_date)
 
     print("loading done")
     return {"data": data, "index": index, "args": args}
@@ -263,7 +261,7 @@ def target_codes(args, terms, strategy_simulator):
         codes = list(set(codes + targets))
     return codes
 
-def select_data(codes, stocks, start, end):
+def select_data(codes, stocks, start, end, strategy_creator):
     select = {"data": {}, "index": stocks["index"], "args": stocks["args"]}
 
     args = select["args"]
@@ -273,19 +271,21 @@ def select_data(codes, stocks, start, end):
             continue
         start_date = utils.to_format(utils.to_datetime(start) - utils.relativeterm(3))
         select["data"][code] = stocks["data"][code].split(start_date, end)
-#        print(select["data"][code].daily["date"].astype(str).values)
+        select["data"][code] = strategy_creator.add_data(stocks["data"][code], stocks["index"])
 
     return select
 
 def simulate_params(stocks, terms, strategy_simulator, ignore_manda=True):
     params = []
     strategy_simulator.simulator_setting.strategy = None
+    strategy_creator = strategy_simulator.strategy_creator(stocks["args"])
     for term in terms:
         start = utils.to_format(term["start_date"])
         end = utils.to_format(term["end_date"])
         codes = select_codes(stocks["args"], start, end, strategy_simulator)
-        select = select_data(codes, stocks, start, end)
+        select = select_data(codes, stocks, start, end, strategy_creator)
         params.append((select, utils.to_format(utils.to_datetime(start)), end, ignore_manda))
+        print("simulate params:", start, end, utils.timestamp())
     return params
 
 # 1つの設定でstart~endまでのterm毎のシミュレーション結果を返す
@@ -478,7 +478,7 @@ def validation(args, stocks, terms, strategy_simulator, combination_setting, str
     if args.verbose or args.apply_compound_interest:
         print("debug mode")
         for param in params:
-            _, start_date, end_date = param
+            _, start_date, end_date, _ = param
             result = simulate_by_term((strategy_simulator, strategy_settings[-1]) + param)
 
             if args.apply_compound_interest: # 複利を適用
